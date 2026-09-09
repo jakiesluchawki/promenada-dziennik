@@ -1,2 +1,9 @@
 .DS_Store
 *.tmp
+_site/
+scripts/vendor/
+scripts/__pycache__/
+scripts/snapshot.json
+scripts/digest.json
+scripts/*-state.json
+scripts/out.txt
