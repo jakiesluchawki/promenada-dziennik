@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffe1eb">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>Promenada · Rodzinny dziennik</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./styles.css">
+<script src="./app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Przejdź do treści</a>
+<header class="masthead"><a class="wordmark" href="./">promenada<span>rodzinny dziennik</span></a><div class="mast-actions"><span class="edition">Szkoła bliżej domu</span><button id="lock" class="quiet" hidden>Zamknij dziennik</button></div></header>
+<section id="gate" class="gate" aria-labelledby="gate-title">
+<div class="gate-copy"><p class="eyebrow">Wasze miejsce na szkolne sprawy</p><h1 id="gate-title">Mniej szukania.<br>Więcej spokoju.</h1><p class="lead">Wiadomości, terminy i codzienność szkoły.<br>Wszystko w jednym rodzinnym dzienniku.</p>
+<form id="unlock-form"><label for="password">Hasło do dziennika</label><div class="password-row"><input id="password" type="password" autocomplete="current-password" required spellcheck="false" autocapitalize="none"><button id="unlock" type="submit">Otwórz dziennik <span aria-hidden="true">↗</span></button></div><label class="check"><input id="show-password" type="checkbox"> Pokaż hasło</label><p id="gate-status" class="form-status" role="status" aria-live="polite"></p></form>
+<p class="privacy-note">To prywatna przestrzeń. Treść odsłania się dopiero po podaniu hasła.</p></div>
+<figure class="gate-art"><img src="./assets/overview.webp" alt="Filcowy dom i szkolne zeszyty w kolorach różu, kremu i oliwki" fetchpriority="high"><figcaption>Codzienne sprawy. Wspólny obraz.</figcaption></figure>
+</section>
+<div id="journal" hidden><div class="journal-toolbar"><div id="children" class="segmented" aria-label="Wybór dziecka"></div><div class="sync"><span id="updated"></span><button id="refresh" class="quiet" type="button">Wczytaj nowszy raport</button></div></div><div id="health"></div><div class="journal-layout"><nav id="nav" aria-label="Działy dziennika"></nav><main id="main" tabindex="-1"></main></div></div>
+<footer>Promenada<span>Mały atlas szkolnej codzienności.</span></footer>
+<noscript>Włącz JavaScript, aby odszyfrować i otworzyć dziennik.</noscript>
+</body></html>

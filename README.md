@@ -1,0 +1,16 @@
+# Promenada
+Rodzinny dziennik w stylistyce CHMURNIKA: Romie, Roobert, różowy papier, oliwkowy tekst i dziesięć autorskich ilustracji z filcu.
+
+Publiczna część zawiera wyłącznie interfejs, fonty, ilustracje oraz zaszyfrowany raport. Dane szkolne i załączniki są odszyfrowywane w przeglądarce kluczem wyprowadzonym z hasła. Repozytorium nie zawiera loginów do Librusa ani hasła dziennika.
+
+## Ochrona treści
+AES-256-GCM; PBKDF2-SHA256, 600 000 iteracji; losowa sól i nonce dla każdego wydania. Hasło nie jest przechowywane w kodzie, localStorage ani sessionStorage. Dziennik zamyka się po 30 minutach bezczynności lub opuszczeniu strony.
+
+GitHub Pages udostępnia publiczny interfejs i szyfrogram. Nie zapewnia tu logowania po stronie serwera. Poufność raportu zależy od silnego, prywatnego hasła; opublikowane kopie szyfrogramu mogą być pobrane i zachowane.
+
+## Dane
+Przegląd, wiadomości, ogłoszenia, plan, terminy, oceny, frekwencja, uwagi, zadania i osiągnięcia. Na stronie zawsze widnieje czas ostatniego odczytu. Błędy odświeżenia nie są przedstawiane jako brak wiadomości lub brak zdarzeń.
+
+Odczyt treści wiadomości może oznaczyć je jako przeczytane w Librusie. Promenada korzysta z własnego archiwum i porównuje treść, niezależnie od statusu „przeczytane”.
+
+Ilustracje i prompty: [ARTWORK.md](ARTWORK.md).
