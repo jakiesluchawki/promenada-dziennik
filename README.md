@@ -14,3 +14,11 @@ Przegląd, wiadomości, ogłoszenia, plan, terminy, oceny, frekwencja, uwagi, za
 Odczyt treści wiadomości może oznaczyć je jako przeczytane w Librusie. Promenada korzysta z własnego archiwum i porównuje treść, niezależnie od statusu „przeczytane”.
 
 Ilustracje i prompty: [ARTWORK.md](ARTWORK.md).
+
+## Automatyczny odczyt
+GitHub Actions odczytuje konta o 07:00 i 18:00 w strefie Europe/Warsaw, szyfruje raport i publikuje go w Pages. Komputer domowy może być wyłączony. Harmonogram może być opóźniony przez kolejkę GitHuba. Przycisk na stronie pobiera ostatni raport; ręczny odczyt uruchamia się przez Run workflow w Actions.
+
+Sekrety LIBRUS_ACCOUNTS i SITE_PASSWORD są przekazywane wyłącznie do etapu kolektora. Artefakt Pages zawiera tylko dozwolone pliki interfejsu i szyfrogram. Przy błędzie konta zachowywany jest ostatni poprawny odczyt oraz ostrzeżenie.
+
+## Nowości i priorytety
+Fioletowe znaczniki wskazują nieprzejrzane treści, bordowe bliskie lub przekroczone terminy, oliwkowe sprawy do dopilnowania, a niebieskie informacje. Priorytet wiadomości można zmienić. Stan przeczytania i wykonania zapisuje się w danej przeglądarce, bez synchronizacji między urządzeniami. Nowe treści są pobierane automatycznie; pierwsza lista spraw została opracowana ręcznie, a priorytety korzystają z prostych reguł, bez modelu AI.

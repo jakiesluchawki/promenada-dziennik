@@ -1,4 +1,6 @@
 "use strict";
+const attachmentUrls=new Set();
+function releaseAttachments(){for(const url of attachmentUrls)URL.revokeObjectURL(url);attachmentUrls.clear()}
 let data=null, keyMaterial=null, selected="all", current="overview", query="", activity=Date.now();
 const $=id=>document.getElementById(id);
 const sections=[
@@ -22,7 +24,7 @@ function isDone(a){return Boolean(a.id&&reviewState.done[a.id]===a.revision)}
 function priority(item){
  if(reviewState.priority[item.revision])return reviewState.priority[item.revision];
  if(item.kind==="Dla chętnych")return "info";
- if(item.date&&item.id&&!["message","announcement"].includes(item.kind)){const days=(new Date(item.date+"T12:00:00")-new Date(dayISO()+"T12:00:00"))/86400000;if(days>=0&&days<=2)return "urgent"}
+ if(item.date&&item.id&&!["message","announcement"].includes(item.kind)){const days=(new Date(item.date+"T12:00:00")-new Date(dayISO()+"T12:00:00"))/86400000;if(days<=2)return "urgent"}
  if(item.kind==="message"||item.kind==="announcement"){
   const related=(data.digest?.actions||[]).filter(a=>a.source_id===item.id);
   if(related.some(a=>priority(a)==="urgent"))return "urgent";
@@ -75,6 +77,7 @@ function getDocuments(){return Object.values(data.accounts).flatMap(a=>[...(a.me
 function openSource(id,fallback){const m=getDocuments().find(m=>m.id===id);if(m){current=m.kind==="announcement"?"announcements":"messages";selected=m.child;query="";render();const d=Array.from(document.querySelectorAll(".document")).find(x=>x.dataset.id===id);if(d){d.open=true;d.scrollIntoView({block:"start",behavior:"smooth"})}}else navigate(fallback||"dates")}
 function render(){
  if(!data)return;
+ releaseAttachments();
  $("children").replaceChildren();
  [["all","Oboje"],...Object.values(data.accounts).map(a=>[a.child,a.name])].forEach(([id,label])=>{const b=button(label,()=>{selected=id;query="";render()});b.setAttribute("aria-pressed",String(selected===id));$("children").append(b)});
  $("updated").textContent="Odczyt: "+datePL(data.collected_at,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
@@ -94,14 +97,14 @@ function allActions(){return (data.digest?.actions||[]).filter(x=>selected==="al
 function actionRow(a){
  const row=el("article","action-row"),date=el("div","action-date",a.date?datePL(a.date,{day:"numeric",month:"short"}):a.when||"Do sprawdzenia");
  date.append(el("small","",a.date?datePL(a.date,{weekday:"long"}):"Bez terminu"));
- const body=el("div");body.append(pill(name(a.child)),priorityPill(a));if(isNew(a)&&!isDone(a))body.append(pill("Nowe","new"));body.append(el("h3","",a.title),el("p","",a.text));
+ const body=el("div");body.append(pill(name(a.child)),priorityPill(a));if(a.date&&a.date<dayISO()&&!isDone(a))body.append(pill("Po terminie","priority-urgent"));if(isNew(a)&&!isDone(a))body.append(pill("Nowe","new"));body.append(el("h3","",a.title),el("p","",a.text));
  if(a.source_id)body.append(button("Przeczytaj źródło ↗",()=>openSource(a.source_id,a.section),"text-button"));
  else if(a.section)body.append(button("Zobacz szczegóły ↗",()=>navigate(a.section),"text-button"));
  if(a.id)body.append(button(isDone(a)?"Zrobione · cofnij":"Oznacz jako zrobione",()=>toggleDone(a),"task-check"));if(isDone(a))row.classList.add("completed");row.append(date,body);return row;
 }
 function overview(){
  const p=panel("Na najbliższe dni","Z wiadomości i terminarza");p.append(attentionBar());
- const ranks={urgent:0,todo:1,info:2};const actions=allActions().filter(a=>(!a.date||a.date>=dayISO())&&(attentionFilter==="done"?isDone(a):!isDone(a))).filter(a=>attentionFilter==="all"||attentionFilter==="done"||attentionFilter==="new"&&isNew(a)||priority(a)===attentionFilter).sort((a,b)=>ranks[priority(a)]-ranks[priority(b)]||(a.date||"9999").localeCompare(b.date||"9999"));
+ const ranks={urgent:0,todo:1,info:2};const actions=allActions().filter(a=>attentionFilter==="done"?isDone(a):!isDone(a)).filter(a=>attentionFilter==="all"||attentionFilter==="done"||attentionFilter==="new"&&isNew(a)||priority(a)===attentionFilter).sort((a,b)=>ranks[priority(a)]-ranks[priority(b)]||(a.date||"9999").localeCompare(b.date||"9999"));
  if(actions.length)actions.forEach(a=>p.append(actionRow(a)));else p.append(empty("Nie ma spraw pasujących do tego filtra."));p.append(el("p","annotation review-note","Znaczniki nowych, przeczytanych i zrobionych spraw zapisują się na tym urządzeniu."));
  $("main").append(p);
  const fresh=chosen().flatMap(a=>[...(a.messages||[]),...(a.announcements||[])]).filter(isNew).sort((a,b)=>b.date.localeCompare(a.date));if(fresh.length){const inbox=panel("Nowe dla Ciebie",fresh.length+" do przeczytania");fresh.slice(0,5).forEach(m=>{const row=el("article","timeline-row");row.append(pill(name(m.child)),priorityPill(m),el("h3","",m.title),el("p","muted",m.text.slice(0,220)+(m.text.length>220?"…":"")),button("Otwórz i przeczytaj ↗",()=>openSource(m.id),"text-button"));inbox.append(row)});$("main").append(inbox)}
@@ -120,9 +123,12 @@ function richText(text){
 }
 function attachment(f){
  if(!f.base64){const p=el("div","notice");p.append(el("p","","Załącznik niedostępny: "+f.name));if(f.url)p.append(safeLink(f.url,"Sprawdź w Librusie ↗"));return p}
- return button("Pobierz · "+f.name+" ("+Math.ceil(f.size/1024)+" KB)",()=>{
- const bytes=Uint8Array.from(atob(f.base64),c=>c.charCodeAt(0)),blob=new Blob([bytes],{type:"application/octet-stream"}),url=URL.createObjectURL(blob),a=el("a");a.href=url;a.download=(f.name||"zalacznik").replace(/[\/\\\u0000-\u001f]/g,"_");document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)
- },"attachment");
+ const bytes=Uint8Array.from(atob(f.base64),c=>c.charCodeAt(0));
+ const url=URL.createObjectURL(new Blob([bytes],{type:"application/octet-stream"}));
+ attachmentUrls.add(url);
+ const a=el("a","attachment","Pobierz · "+f.name+" ("+Math.ceil(f.size/1024)+" KB)");
+ a.href=url;a.download=(f.name||"zalacznik").replace(/[\/\\\u0000-\u001f]/g,"_");
+ return a;
 }
 function doc(m){
  const d=el("details","document");d.dataset.id=m.id;const s=el("summary");
@@ -133,7 +139,7 @@ function documents(){
  const docs=chosen().flatMap(a=>a[current]||[]).sort((a,b)=>b.date.localeCompare(a.date));
  const p=panel(current==="messages"?"Połączona skrzynka":"Tablica ogłoszeń","Liczba wpisów: "+docs.length), label=el("label","search-label","Szukaj w temacie, treści lub autorze");label.htmlFor="search";
  const input=el("input","search");input.id="search";input.type="search";input.placeholder="Wpisz słowo lub nazwisko";input.value=query;
- const list=el("div");const refreshList=()=>{const q=input.value.trim().toLocaleLowerCase("pl");query=input.value;const filtered=docs.filter(m=>(m.title+" "+m.text+" "+m.sender).toLocaleLowerCase("pl").includes(q));list.replaceChildren(...filtered.map(doc));if(!filtered.length)list.append(empty("Nie znaleziono pasujących wpisów."))};
+ const list=el("div");const refreshList=()=>{releaseAttachments();const q=input.value.trim().toLocaleLowerCase("pl");query=input.value;const filtered=docs.filter(m=>(m.title+" "+m.text+" "+m.sender).toLocaleLowerCase("pl").includes(q));list.replaceChildren(...filtered.map(doc));if(!filtered.length)list.append(empty("Nie znaleziono pasujących wpisów."))};
  input.addEventListener("input",refreshList);refreshList();p.append(label,input,list);$("main").append(p);
 }
 function timetable(){
@@ -212,7 +218,7 @@ $("unlock-form").addEventListener("submit",async e=>{
  finally{$("unlock").disabled=false}
 });
 $("show-password").addEventListener("change",e=>{$("password").type=e.target.checked?"text":"password"});
-function lock(){data=null;keyMaterial=null;selected="all";current="overview";query="";$("main").replaceChildren();$("children").replaceChildren();$("nav").replaceChildren();$("health").replaceChildren();$("updated").textContent="";$("journal").hidden=true;$("gate").hidden=false;$("lock").hidden=true;$("password").type="password";$("show-password").checked=false;$("password").value="";window.scrollTo({top:0,behavior:"instant"})}
+function lock(){releaseAttachments();data=null;keyMaterial=null;selected="all";current="overview";query="";$("main").replaceChildren();$("children").replaceChildren();$("nav").replaceChildren();$("health").replaceChildren();$("updated").textContent="";$("journal").hidden=true;$("gate").hidden=false;$("lock").hidden=true;$("password").type="password";$("show-password").checked=false;$("password").value="";window.scrollTo({top:0,behavior:"instant"})}
 $("lock").addEventListener("click",lock);
 $("refresh").addEventListener("click",async()=>{if(!keyMaterial)return;$("refresh").disabled=true;$("refresh").textContent="Wczytuję…";try{const fresh=await decrypt(await fetchReport(),keyMaterial);if(keyMaterial){data=fresh;render()}}catch{$("health").replaceChildren(el("div","notice","Nie udało się wczytać nowszego raportu. Oglądasz ostatnio otwartą wersję."))}finally{$("refresh").disabled=false;$("refresh").textContent="Wczytaj nowszy raport"}});
 ["pointerdown","keydown"].forEach(type=>document.addEventListener(type,()=>activity=Date.now(),{passive:true}));
