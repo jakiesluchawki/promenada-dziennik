@@ -26,11 +26,8 @@ def main():
         publisher.build()
     state=json.loads((WORK/"snapshot.json").read_text())
     failed=failed or any(a.get("status")!="ok" for a in state["accounts"].values())
-    public=ROOT/"_site";public.mkdir(exist_ok=True)
-    for name in ["index.html","styles.css","app.js","favicon.svg","report.enc.json",".nojekyll"]:
-        shutil.copy2(ROOT/name,public/name)
-    for name in ["assets","fonts","kompakt"]:
-        shutil.copytree(ROOT/name,public/name,dirs_exist_ok=True)
+    from stage_site import stage
+    stage(ROOT)
     with open(os.environ.get("GITHUB_OUTPUT",str(BASE/"out.txt")),"a") as f:f.write("healthy="+("false" if failed else "true")+"\n")
     for p in ["snapshot.json","digest.json","published-state.json","snapshot.tmp","report.enc.tmp"]:
         (WORK/p).unlink(missing_ok=True)
