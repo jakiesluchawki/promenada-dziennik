@@ -41,3 +41,6 @@ Create a new standalone editorial still-life illustration in the exact tactile C
 ## achievements
 
 Create a new standalone editorial still-life illustration in the exact tactile CHMURNIK visual language of the reference image. Handcrafted thick wool felt with clearly visible fine fibers, softly sculpted geometric objects, warm cream #fff7f1, olive #6d6435, powder pink #ffe1eb, small restrained deep violet #7442d9 accent. Seamless pale pink studio floor and background, gentle realistic daylight shadow, premium quiet Polish field-atlas aesthetic. No text, letters, numbers, logos, faces or people. Large clean centered subject taking about 65% frame with ample pink margins. Square format. This is one image in a visually consistent family school journal icon collection. Transform the reference's subject entirely into this new subject: A sculptural cream felt rosette with olive folded ribbon tails and a single small violet center disk. Subtle accomplishment, not flashy trophy or game reward.
+## Tło wersji kompaktowej
+
+Widok produkcyjny używa panoramy assets/paper-scene.webp. Wygenerowana wbudowanym Imagegen; [pełny prompt](kompakt/ARTWORK.md).

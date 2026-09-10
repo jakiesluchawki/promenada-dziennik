@@ -13,6 +13,7 @@ def stage(root):
     for folder in [out,out/"kompakt"]:
         page=folder/"index.html";html=page.read_text()
         for name in ["styles.css","app.js"]:
+            if not (folder/name).is_file(): continue
             version=hashlib.sha256((folder/name).read_bytes()).hexdigest()[:12]
             html=re.sub(r'(href|src)="\./'+re.escape(name)+r'(?:\?[^"]*)?"',lambda m:m.group(1)+'="./'+name+'?v='+version+'"',html)
         page.write_text(html)

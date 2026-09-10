@@ -1,5 +1,3 @@
-# Wariant B — kompakt
+# Promenada
 
-Osobny widok do oceny na telefonie. Otwiera się tym samym hasłem co podstawowy dziennik. Zawiera zamrożoną, zaszyfrowaną kopię raportu; bez własnego automatycznego odczytu. Oznaczenia przeczytane i zrobione mają osobny zapis lokalny.
-
-Podgląd: https://jakiesluchawki.github.io/promenada-dziennik/kompakt/
+Zatwierdzony wariant kompaktowy jest główną stroną. Ścieżka /kompakt/ przekierowuje do głównego adresu i aktualizowanego raportu. Plik grafiki oraz jej prompt pozostają dostępne jako materiały źródłowe.

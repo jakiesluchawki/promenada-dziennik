@@ -1,5 +1,5 @@
 # Promenada
-Rodzinny dziennik w stylistyce CHMURNIKA: Romie, Roobert, różowy papier, oliwkowy tekst i dziesięć autorskich ilustracji z filcu.
+Rodzinny dziennik w stylistyce CHMURNIKA: Romie, Roobert, różowy papier, oliwkowy tekst i autorskie ilustracje z filcu, w tym tło kompaktowego widoku.
 
 Publiczna część zawiera wyłącznie interfejs, fonty, ilustracje oraz zaszyfrowany raport. Dane szkolne i załączniki są odszyfrowywane w przeglądarce kluczem wyprowadzonym z hasła. Repozytorium nie zawiera loginów do Librusa ani hasła dziennika.
 
@@ -23,6 +23,6 @@ Sekrety LIBRUS_ACCOUNTS i SITE_PASSWORD są przekazywane wyłącznie do etapu ko
 ## Nowości i priorytety
 Fioletowe znaczniki wskazują nieprzejrzane treści, bordowe bliskie lub przekroczone terminy, oliwkowe sprawy do dopilnowania, a niebieskie informacje. Priorytet wiadomości można zmienić. Stan przeczytania i wykonania zapisuje się w danej przeglądarce, bez synchronizacji między urządzeniami. Nowe treści są pobierane automatycznie; pierwsza lista spraw została opracowana ręcznie, a priorytety korzystają z prostych reguł, bez modelu AI.
 
-## Kompaktowy podgląd
+## Kompaktowy widok produkcyjny
 
-Ścieżka /kompakt/ zawiera osobny wariant do oceny z zamrożonym report.enc.json i tym samym hasłem. Nie ma własnego odczytu Librusa. Wspólna publikacja tylko zachowuje pliki tego wariantu; nie aktualizuje jego danych.
+Zatwierdzona wersja B jest głównym interfejsem. Korzysta z aktualizowanego report.enc.json, dotychczasowego hasła i zapisanych oznaczeń produkcyjnych. Ścieżka /kompakt/ przekierowuje do głównej strony.

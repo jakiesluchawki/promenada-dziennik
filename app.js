@@ -55,9 +55,10 @@ function newCount(id){
 }
 function attentionBar(){
  const bar=el("div","attention-bar");
- [["all","Do przejrzenia"],["urgent","Pilne"],["todo","Do dopilnowania"],["new","Nowe"],["done","Zrobione"]].forEach(([id,title])=>{const b=button(title,()=>{attentionFilter=id;render()},"attention-button");b.setAttribute("aria-pressed",String(attentionFilter===id));bar.append(b)});
+ [["all","Otwarte"],["urgent","Pilne"],["new","Nowe"],["done","Zrobione"]].forEach(([id,title])=>{const b=button(title,()=>{attentionFilter=id;render()},"attention-button");b.setAttribute("aria-pressed",String(attentionFilter===id));bar.append(b)});
  return bar;
 }
+
 function sectionReview(sec){const box=el("div","section-review");if(isNew(sec)){box.append(pill("Nowe dane","new"),button("Oznacz jako przejrzane",()=>markRead(sec),"text-button"))}else box.append(el("span","annotation","Przejrzane na tym urządzeniu"));return box}
 
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
@@ -72,9 +73,56 @@ function empty(text){return el("p","empty",text)}
 function heading(title,note){const h=el("div","section-heading");h.append(el("h2","",title));if(note)h.append(el("span","annotation",note));return h}
 function panel(title,note){const p=el("section","section-body");if(title)p.append(heading(title,note));return p}
 function raw(section){const d=el("details","source-raw");d.append(el("summary","","Pełny odczyt tej części Librusa"),el("div","raw-text",section.text||"Brak treści."),safeLink(section.url,"Otwórz w Librusie ↗"));return d}
-function navigate(id){current=id;query="";attentionFilter="all";render();$("main").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"})}
+function navigate(id){current=id;query="";attentionFilter="all";documentFilter="all";render();$("main").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"})}
 function getDocuments(){return Object.values(data.accounts).flatMap(a=>[...(a.messages||[]),...(a.announcements||[])])}
 function openSource(id,fallback){const m=getDocuments().find(m=>m.id===id);if(m){current=m.kind==="announcement"?"announcements":"messages";selected=m.child;query="";render();const d=Array.from(document.querySelectorAll(".document")).find(x=>x.dataset.id===id);if(d){d.open=true;d.scrollIntoView({block:"start",behavior:"smooth"})}}else navigate(fallback||"dates")}
+
+let documentFilter="all";
+const compactTitles={overview:["Sprawy na teraz","Najważniejsze informacje, w krótszym widoku."],messages:["Wiadomości","Pełna treść po rozwinięciu wiadomości."],announcements:["Ogłoszenia","Komunikaty z obu szkół."],timetable:["Plan lekcji","Dotknij godzin, aby zobaczyć lekcje."],dates:["Terminy","Daty z wiadomości i terminarza."],grades:["Oceny","Bieżące oceny i opisy postępów."],attendance:["Frekwencja","Nieobecności, zwolnienia i spóźnienia."],notes:["Uwagi","Wpisy i spostrzeżenia nauczycieli."],homework:["Zadania","Prace domowe, lektury i przygotowania."],achievements:["Osiągnięcia","Sukcesy zapisane przez szkołę."],more:["Pozostałe działy","Wszystkie szkolne sprawy są pod ręką."]};
+const primarySections=["overview","messages","timetable","grades"];
+function uiIcon(key){
+ const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+ svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("fill","none");svg.setAttribute("stroke","currentColor");svg.setAttribute("stroke-width","1.6");svg.setAttribute("stroke-linecap","round");svg.setAttribute("stroke-linejoin","round");svg.setAttribute("aria-hidden","true");svg.classList.add("nav-icon");
+ const paths={
+ overview:'<rect x="4" y="3" width="16" height="18" rx="3"/><path d="m8 9 1.5 1.5L12 8M14 10h3m-9 5h9"/>',
+ messages:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/>',
+ timetable:'<rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 10h16m-12 4h2m4 0h2m-8 4h2"/>',
+ grades:'<path d="M5 20V7a2 2 0 0 1 2-2h12v15H7a2 2 0 0 1 0-4h12"/><path d="m10 11 1.5 1.5L15 9"/>',
+ more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+ announcements:'<path d="m3 10 15-5v14L3 14zm4 5 1 5h3l-1-4m11-9v10"/>',
+ dates:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ attendance:'<path d="m5 12 4 4L19 6"/><path d="M4 4h5M4 20h16"/>',
+ notes:'<path d="M5 4h14v13H9l-4 4zM8 8h8m-8 4h6"/>',
+ homework:'<path d="M4 20h16M6 16l1-4L17 2l4 4-10 10zm9-12 4 4"/>',
+ achievements:'<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>'
+ };
+ svg.innerHTML=paths[key]||paths.more;return svg;
+}
+function childTag(key){return el("span","child-tag",name(key))}
+function shortDate(s){return datePL(s,{day:"numeric",month:"short"})}
+function lessonCount(n){return n+" "+(n===1?"lekcja":n%10>=2&&n%10<=4&&!(n%100>=12&&n%100<=14)?"lekcje":"lekcji")}
+function lessonSpan(day){
+ const lessons=day?.lessons||[],active=lessons.filter(x=>!x.text.toLowerCase().includes("odwołane"));
+ const first=active[0]?.time.match(/\d\d:\d\d/g)?.[0],last=active.at(-1)?.time.match(/\d\d:\d\d/g)?.[1];
+ return {active,span:first&&last?first+"–"+last:"Brak lekcji"};
+}
+function todayPlan(){
+ const p=panel("Dziś w planie",shortDate(dayISO()));
+ chosen().forEach(a=>{
+  const day=a.sections?.timetable?.days?.find(d=>d.label.includes(dayISO()));
+  const trip=(a.sections?.attendance?.entries||[]).some(e=>e.date===dayISO()&&e.details?.includes("Czy wycieczka: Tak"));
+  const time=trip?"Wycieczka · sprawdź godziny":day?lessonSpan(day).span:"Brak dnia w odczycie";
+  const b=button("",()=>{selected=a.child;navigate("timetable")},"plan-glance");b.append(el("strong","",a.name),el("span","",time));p.append(b);
+ });return p;
+}
+function moreSections(){
+ const p=panel("Działy dziennika"),list=el("div","more-list");
+ const subtitles={announcements:"Tablica ogłoszeń",dates:"Sprawdziany, terminy i wydarzenia",attendance:"Obecność i zwolnienia",notes:"Informacje od nauczycieli",homework:"Przygotowania i prace domowe",achievements:"Szczególne osiągnięcia"};
+ sections.filter(([id])=>!primarySections.includes(id)).forEach(([id,title])=>{
+  const b=button("",()=>navigate(id),"more-row"),text=el("span");text.append(el("strong","",title),el("small","",subtitles[id]||""));b.append(uiIcon(id),text);const n=newCount(id);if(n)b.append(el("span","nav-count",String(n)));else b.append(el("span","row-chevron"));list.append(b);
+ });p.append(list);$("main").append(p);
+}
+
 function missedCollection(){
  const parts=d=>Object.fromEntries(new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(d).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
  const now=parts(new Date()),read=parts(new Date(data.collected_at)),today=now.year+"-"+now.month+"-"+now.day,readAt=read.year+"-"+read.month+"-"+read.day+"T"+read.hour+":"+read.minute;
@@ -84,6 +132,7 @@ function missedCollection(){
 }
 function render(){
  if(!data)return;
+ const expanded=new Set(Array.from(document.querySelectorAll("details[open][data-id]")).map(d=>d.dataset.id));
  releaseAttachments();
  $("children").replaceChildren();
  [["all","Oboje"],...Object.values(data.accounts).map(a=>[a.child,a.name])].forEach(([id,label])=>{const b=button(label,()=>{selected=id;query="";render()});b.setAttribute("aria-pressed",String(selected===id));$("children").append(b)});
@@ -93,37 +142,50 @@ function render(){
  if(bad.length){const n=el("div","notice");n.append(el("p","","Nie udało się odświeżyć konta: "+bad.map(a=>a.name).join(", ")+". Poniżej ostatni poprawny odczyt."));$("health").append(n)}
  if(missedCollection()){$("health").append(el("div","notice","Brakuje raportu z ostatniej pory odczytu. Serwer może jeszcze ponawiać zadanie. Widoczna data pokazuje rzeczywisty odczyt — przycisk sprawdzi, czy pojawił się nowszy plik."))}
  $("nav").replaceChildren();
- sections.forEach(([id,label],i)=>{const b=button("",()=>navigate(id));b.append(el("span","",String(i+1).padStart(2,"0")),el("span","",label));const n=newCount(id);if(n)b.append(el("span","nav-count",String(n)));if(id===current)b.setAttribute("aria-current","page");$("nav").append(b)});
- const spec=sections.find(x=>x[0]===current), hero=el("header","section-hero"),copy=el("div");
- copy.append(el("p","eyebrow","Promenada / "+spec[1]),el("h1","",spec[2]),el("p","",spec[3]));
- const img=el("img");img.src="./assets/"+current+".webp";img.alt="";img.width=360;img.height=360;hero.append(copy,img);
- $("main").replaceChildren(hero);
- ({overview:overview,messages:documents,announcements:documents,timetable:timetable,dates:dates,grades:grades,attendance:attendance,notes:simple,homework:homework,achievements:simple}[current])();
+ const navNames={overview:"Sprawy",messages:"Poczta",timetable:"Plan",grades:"Oceny"};
+ sections.forEach(([id,label])=>{
+  const b=button("",()=>navigate(id),primarySections.includes(id)?"nav-primary":"nav-secondary");b.dataset.section=id;
+  b.append(uiIcon(id),el("span","nav-label",navNames[id]||label));b.setAttribute("aria-label",label);
+  const n=newCount(id);if(n)b.append(el("span","nav-count",String(n)));if(id===current)b.setAttribute("aria-current","page");$("nav").append(b);
+ });
+ const more=button("",()=>navigate("more"),"nav-more");more.setAttribute("aria-label","Więcej działów");more.append(uiIcon("more"),el("span","nav-label","Więcej"));const otherNew=sections.filter(([id])=>!primarySections.includes(id)).reduce((total,[id])=>total+newCount(id),0);if(otherNew)more.append(el("span","nav-count",String(otherNew)));if(!primarySections.includes(current))more.setAttribute("aria-current","page");$("nav").append(more);
+ const spec=compactTitles[current]||compactTitles.overview,hero=el("header","section-hero");
+ hero.append(el("h1","",spec[0]),el("p","",spec[1]));$("main").replaceChildren(hero);
+ ({overview,documents,messages:documents,announcements:documents,timetable,dates,grades,attendance,notes:simple,homework,achievements:simple,more:moreSections}[current])();
+ document.querySelectorAll("details[data-id]").forEach(d=>{if(expanded.has(d.dataset.id))d.open=true});
 }
+
 function allActions(){return (data.digest?.actions||[]).filter(x=>selected==="all"||x.child===selected)}
 function actionRow(a){
- const row=el("article","action-row"),date=el("div","action-date",a.date?datePL(a.date,{day:"numeric",month:"short"}):a.when||"Do sprawdzenia");
- date.append(el("small","",a.date?datePL(a.date,{weekday:"long"}):"Bez terminu"));
- const body=el("div");body.append(pill(name(a.child)),priorityPill(a));if(a.date&&a.date<dayISO()&&!isDone(a))body.append(pill("Po terminie","priority-urgent"));if(isNew(a)&&!isDone(a))body.append(pill("Nowe","new"));body.append(el("h3","",a.title),el("p","",a.text));
- if(a.source_id)body.append(button("Przeczytaj źródło ↗",()=>openSource(a.source_id,a.section),"text-button"));
- else if(a.section)body.append(button("Zobacz szczegóły ↗",()=>navigate(a.section),"text-button"));
- if(a.id)body.append(button(isDone(a)?"Zrobione · cofnij":"Oznacz jako zrobione",()=>toggleDone(a),"task-check"));if(isDone(a))row.classList.add("completed");row.append(date,body);return row;
+ const row=el("details","task-row");row.dataset.id=a.id||a.source_id||a.title;
+ const sum=el("summary"),date=el("span","task-when"+(!a.date?" undated":""));
+ if(a.date)date.append(el("span","",datePL(a.date,{day:"numeric"})),el("small","",datePL(a.date,{month:"short"})));
+ else date.append(el("span","",a.when||"Bez daty"));
+ const copy=el("div"),meta=el("div","row-meta");meta.append(childTag(a.child),priorityPill(a));if(isNew(a)&&!isDone(a))meta.append(pill("Nowe","new"));if(a.date&&a.date<dayISO()&&!isDone(a))meta.append(pill("Po terminie","priority-urgent"));
+ copy.append(meta,el("h3","task-title",a.title));sum.append(date,copy,el("span","row-chevron"));
+ const content=el("div","task-content");content.append(el("p","",a.text));const controls=el("div","row-actions");
+ if(a.source_id)controls.append(button("Przeczytaj źródło ↗",()=>openSource(a.source_id,a.section),"text-button"));
+ else if(a.section)controls.append(button("Zobacz szczegóły ↗",()=>navigate(a.section),"text-button"));
+ if(a.id)controls.append(button(isDone(a)?"Zrobione · cofnij":"Oznacz jako zrobione",()=>toggleDone(a),"task-check"));
+ content.append(controls);row.append(sum,content);if(isDone(a))row.classList.add("completed");return row;
 }
+
 function overview(){
- const p=panel("Na najbliższe dni","Z wiadomości i terminarza");p.append(attentionBar());
- const ranks={urgent:0,todo:1,info:2};const actions=allActions().filter(a=>attentionFilter==="done"?isDone(a):!isDone(a)).filter(a=>attentionFilter==="all"||attentionFilter==="done"||attentionFilter==="new"&&isNew(a)||priority(a)===attentionFilter).sort((a,b)=>ranks[priority(a)]-ranks[priority(b)]||(a.date||"9999").localeCompare(b.date||"9999"));
- if(actions.length)actions.forEach(a=>p.append(actionRow(a)));else p.append(empty("Nie ma spraw pasujących do tego filtra."));p.append(el("p","annotation review-note","Znaczniki nowych, przeczytanych i zrobionych spraw zapisują się na tym urządzeniu."));
- $("main").append(p);
- const fresh=chosen().flatMap(a=>[...(a.messages||[]),...(a.announcements||[])]).filter(isNew).sort((a,b)=>b.date.localeCompare(a.date));if(fresh.length){const inbox=panel("Nowe dla Ciebie",fresh.length+" do przeczytania");fresh.slice(0,5).forEach(m=>{const row=el("article","timeline-row");row.append(pill(name(m.child)),priorityPill(m),el("h3","",m.title),el("p","muted",m.text.slice(0,220)+(m.text.length>220?"…":"")),button("Otwórz i przeczytaj ↗",()=>openSource(m.id),"text-button"));inbox.append(row)});$("main").append(inbox)}
- const bottom=el("div","overview-bottom"), n=chosen().reduce((s,a)=>s+(a.messages||[]).length,0);
- const recent=panel("Ze szkolnej poczty");recent.append(el("div","mini-count",String(n)),el("p","annotation","wiadomości w połączonym archiwum"));
- chosen().flatMap(a=>a.messages||[]).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3).forEach(m=>{const row=el("div","timeline-row");row.append(pill(name(m.child)),el("p","",m.title),button("Czytaj wiadomość ↗",()=>openSource(m.id),"text-button"));recent.append(row)});
- const shelves=panel("Zajrzyj dalej");
- [["timetable","Plan całego tygodnia"],["attendance","Frekwencja i zwolnienia"],["grades","Oceny i opisy postępów"]].forEach(([id,label])=>{const row=el("div","jump"),img=el("img");img.src="./assets/"+id+".webp";img.alt="";img.loading="lazy";row.append(img,button(label,()=>navigate(id)));shelves.append(row)});
- bottom.append(recent,shelves);$("main").append(bottom);
+ const grid=el("div","overview-grid"),p=panel("Do dopilnowania",allActions().filter(a=>!isDone(a)).length+" otwartych");p.append(attentionBar());
+ const ranks={urgent:0,todo:1,info:2};
+ const actions=allActions().filter(a=>attentionFilter==="done"?isDone(a):!isDone(a)).filter(a=>attentionFilter==="all"||attentionFilter==="done"||attentionFilter==="new"&&isNew(a)||priority(a)===attentionFilter).sort((a,b)=>ranks[priority(a)]-ranks[priority(b)]||(a.date||"9999").localeCompare(b.date||"9999"));
+ if(actions.length)actions.forEach(a=>p.append(actionRow(a)));else p.append(empty("Nie ma spraw pasujących do tego filtra."));
+ p.append(el("p","annotation review-note","Rozwiń wiersz, aby przeczytać szczegóły lub oznaczyć sprawę jako zrobioną."));
+ const aside=el("div","overview-aside");aside.append(todayPlan());
+ const fresh=chosen().flatMap(a=>[...(a.messages||[]),...(a.announcements||[])]).filter(isNew).sort((a,b)=>b.date.localeCompare(a.date)),inbox=panel("Nowe ze szkoły",String(fresh.length));
+ if(!fresh.length)inbox.append(empty("Wszystkie treści są przejrzane."));
+ fresh.slice(0,4).forEach(m=>{const b=button("",()=>openSource(m.id),"fresh-row"),meta=el("div","row-meta");meta.append(childTag(m.child),el("span","doc-date",shortDate(m.date)));b.append(meta,el("strong","",m.title));inbox.append(b)});
+ inbox.append(button("Wszystkie wiadomości ↗",()=>navigate("messages"),"text-button all-messages"));aside.append(inbox);
  const notes=(data.digest?.observations||[]).filter(a=>selected==="all"||a.child===selected);
- if(notes.length){const p=panel("Dobrze wiedzieć","Stan z ostatniego odczytu");notes.forEach(a=>p.append(actionRow(a)));$("main").append(p)}
+ if(notes.length){const notesPanel=panel("Warto sprawdzić");notes.forEach(a=>notesPanel.append(actionRow(a)));aside.append(notesPanel)}
+ grid.append(p,aside);$("main").append(grid);
 }
+
 function richText(text){
  const p=el("p");const regex=/https?:\/\/[^\s<>"')]+/g;let last=0;
  for(const m of text.matchAll(regex)){p.append(document.createTextNode(text.slice(last,m.index)));p.append(safeLink(m[0],m[0]));last=m.index+m[0].length}p.append(document.createTextNode(text.slice(last)));return p;
@@ -138,32 +200,47 @@ function attachment(f){
  return a;
 }
 function doc(m){
- const d=el("details","document");d.dataset.id=m.id;const s=el("summary");
- s.append(pill(name(m.child)),priorityPill(m));if(isNew(m))s.append(pill("Nowe","new"));s.append(el("span","doc-meta",datePL(m.date)),el("h3","doc-title",m.title),el("p","doc-meta",m.sender));
- const body=el("div","doc-content");body.append(richText(m.text||"Brak treści."));(m.attachments||[]).forEach(f=>body.append(attachment(f)));body.append(safeLink(m.url,"Oryginał w Librusie ↗"));const controls=el("div","document-controls");controls.append(button(isNew(m)?"Oznacz jako przeczytane":"Przeczytane",()=>markRead(m),"quiet"));const lbl=el("label","annotation","Priorytet ");const sel=el("select");sel.setAttribute("aria-label","Priorytet wiadomości");Object.entries(priorityLabel).forEach(([value,title])=>{const option=el("option","",title);option.value=value;sel.append(option)});sel.value=priority(m);sel.addEventListener("change",()=>{reviewState.priority[m.revision]=sel.value;saveReview();render()});lbl.append(sel);controls.append(lbl);body.append(controls);d.append(s,body);return d;
+ const d=el("details","document");d.dataset.id=m.id;const s=el("summary"),meta=el("div","row-meta");
+ meta.append(childTag(m.child),priorityPill(m));if(isNew(m))meta.append(pill("Nowe","new"));meta.append(el("span","doc-date",shortDate(m.date)));
+ s.append(meta,el("h3","doc-title",m.title),el("p","doc-preview",m.text.replace(/\s+/g," ").slice(0,180)));
+ const body=el("div","doc-content");body.append(el("p","doc-author",m.sender),richText(m.text||"Brak treści."));(m.attachments||[]).forEach(f=>body.append(attachment(f)));body.append(safeLink(m.url,"Oryginał w Librusie ↗"));
+ const controls=el("div","document-controls");controls.append(button(isNew(m)?"Oznacz jako przeczytane":"Przeczytane",()=>markRead(m),"quiet"));
+ const lbl=el("label","annotation","Priorytet "),sel=el("select");sel.setAttribute("aria-label","Priorytet wiadomości");
+ Object.entries(priorityLabel).forEach(([value,title])=>{const option=el("option","",title);option.value=value;sel.append(option)});sel.value=priority(m);
+ sel.addEventListener("change",()=>{reviewState.priority[m.revision]=sel.value;saveReview();render()});lbl.append(sel);controls.append(lbl);body.append(controls);d.append(s,body);return d;
 }
+
 function documents(){
- const docs=chosen().flatMap(a=>a[current]||[]).sort((a,b)=>b.date.localeCompare(a.date));
- const p=panel(current==="messages"?"Połączona skrzynka":"Tablica ogłoszeń","Liczba wpisów: "+docs.length), label=el("label","search-label","Szukaj w temacie, treści lub autorze");label.htmlFor="search";
- const input=el("input","search");input.id="search";input.type="search";input.placeholder="Wpisz słowo lub nazwisko";input.value=query;
- const list=el("div");const refreshList=()=>{releaseAttachments();const q=input.value.trim().toLocaleLowerCase("pl");query=input.value;const filtered=docs.filter(m=>(m.title+" "+m.text+" "+m.sender).toLocaleLowerCase("pl").includes(q));list.replaceChildren(...filtered.map(doc));if(!filtered.length)list.append(empty("Nie znaleziono pasujących wpisów."))};
- input.addEventListener("input",refreshList);refreshList();p.append(label,input,list);$("main").append(p);
+ const docs=chosen().flatMap(a=>a[current]||[]).sort((a,b)=>b.date.localeCompare(a.date)),p=panel(current==="messages"?"Szkolna poczta":"Tablica ogłoszeń",docs.length+" wpisów");
+ const label=el("label","search-label","Szukaj w temacie lub treści");label.htmlFor="search";const input=el("input","search");input.id="search";input.type="search";input.placeholder="Szukaj wiadomości…";input.value=query;
+ const filters=el("div","attention-bar");[["all","Wszystkie"],["new","Nowe"],["urgent","Pilne"]].forEach(([id,title])=>{const b=button(title,()=>{documentFilter=id;render()},"attention-button");b.setAttribute("aria-pressed",String(id===documentFilter));filters.append(b)});
+ const list=el("div");const refreshList=()=>{releaseAttachments();const q=input.value.trim().toLocaleLowerCase("pl");query=input.value;const filtered=docs.filter(m=>(m.title+" "+m.text+" "+m.sender).toLocaleLowerCase("pl").includes(q)).filter(m=>documentFilter==="all"||documentFilter==="new"&&isNew(m)||documentFilter==="urgent"&&priority(m)==="urgent");list.replaceChildren(...filtered.map(doc));if(!filtered.length)list.append(empty("Nie znaleziono pasujących wpisów."))};
+ input.addEventListener("input",refreshList);refreshList();p.append(label,input,filters,list);$("main").append(p);
 }
+
 function timetable(){
- const p=panel("Tydzień w szkole","Godziny lekcji, bez dojazdów");
- chosen().forEach(a=>{const sec=a.sections?.timetable;if(!sec){p.append(empty(a.name+": brak odczytu planu."));return}const child=el("section","child-section");child.append(el("h3","child-title",a.name));
- (sec.days||[]).forEach(day=>{
- const d=el("details","week-day"),sum=el("summary"),title=el("h4","",day.label),active=day.lessons.filter(x=>!x.text.toLowerCase().includes("odwołane"));
- const start=active[0]?.time.match(/\d\d:\d\d/g)?.[0], end=active.at(-1)?.time.match(/\d\d:\d\d/g)?.[1];
- sum.append(title,el("span","day-times",start&&end?start+"–"+end:"Brak aktywnych lekcji"));d.append(sum);
- if(day.lessons.length===0)d.append(empty("W planie nie ma zajęć na ten dzień."));
- day.lessons.forEach(lesson=>{const row=el("div","lesson");row.append(el("time","",lesson.time.replace(/\s*-\s*/,"–")));const txt=el("div");const canceled=lesson.text.includes("odwołane");txt.append(el("span",canceled?"canceled":"",lesson.text));if(canceled)txt.append(el("small","","Lekcja odwołana"));if(lesson.details?.length)txt.append(el("small","",lesson.details.join("\n")));row.append(txt);d.append(row)});
- child.append(d);
+ const accounts=chosen(),p=panel("Cały tydzień","Godziny lekcji"),matrix=el("div","week-matrix"+(accounts.length===1?" single":"")),head=el("div","week-heading");head.append(el("span","","Dzień"));accounts.forEach(a=>head.append(el("strong","",a.name)));matrix.append(head);
+ const dateKeys=[...new Set(accounts.flatMap(a=>(a.sections?.timetable?.days||[]).map(d=>d.label.match(/\d{4}-\d{2}-\d{2}/)?.[0]).filter(Boolean)))].sort();
+ if(!dateKeys.length)p.append(empty("Brak odczytanego planu."));
+ const shortDays={"poniedziałek":"Pon.","wtorek":"Wt.","środa":"Śr.","czwartek":"Czw.","piątek":"Pt.","sobota":"Sob.","niedziela":"Niedz."};
+ dateKeys.forEach(date=>{
+  const line=el("div","week-line"),dayLabel=el("div","week-label");const weekday=datePL(date,{weekday:"long"});dayLabel.append(el("strong","",shortDays[weekday]||weekday),el("small","",datePL(date,{day:"numeric",month:"2-digit"})));line.append(dayLabel);
+  const details=el("div","week-details");details.hidden=true;line.append(details);
+  accounts.forEach(a=>{
+   const day=a.sections?.timetable?.days?.find(d=>d.label.includes(date)),plan=lessonSpan(day),active=plan.active,trip=(a.sections?.attendance?.entries||[]).some(e=>e.date===date&&e.details?.includes("Czy wycieczka: Tak")),span=trip?"Wycieczka":day?plan.span:"Brak odczytu";
+   const b=el("button","week-slot");b.type="button";
+   b.setAttribute("aria-label",a.name+", "+weekday+", "+span+". Rozwiń lekcje");b.setAttribute("aria-expanded","false");b.append(el("strong","",span),el("span","",trip?"sprawdź godziny":!day?"brak odczytu":active.length?lessonCount(active.length)+" ↗":day.lessons.length?"odwołane · szczegóły":"brak wpisów"));
+   b.addEventListener("click",()=>{
+    const close=b.getAttribute("aria-expanded")==="true";line.querySelectorAll("button").forEach(x=>x.setAttribute("aria-expanded","false"));details.replaceChildren();details.hidden=close;if(close)return;b.setAttribute("aria-expanded","true");details.append(el("h3","",a.name+" · "+weekday));if(trip)details.append(el("p","notice","Frekwencja wskazuje wycieczkę. Godziny wyjścia i powrotu nie są podane w planie lekcji."));
+    if(!day?.lessons?.length)details.append(empty("W odczytanym planie nie ma lekcji na ten dzień."));
+    (day?.lessons||[]).forEach(lesson=>{const row=el("div","lesson");row.append(el("time","",lesson.time.replace(/\s*-\s*/,"–")));const body=el("div"),canceled=lesson.text.toLowerCase().includes("odwołane");body.append(el("span",canceled?"canceled":"",lesson.text));if(canceled)body.append(el("small","","Lekcja odwołana"));if(lesson.details?.length)body.append(el("small","",lesson.details.join("\n")));row.append(body);details.append(row)});
+   });
+   line.insertBefore(b,details);
+  });matrix.append(line);
  });
- child.append(sectionReview(sec),safeLink(sec.url,"Plan w Librusie ↗"));p.append(child);
- });
- p.append(el("p","annotation","Odwołana lekcja nie przesądza o pobycie w domu. Wycieczki i zwolnienia sprawdzisz w frekwencji."));$("main").append(p);
+ p.append(matrix);const sources=el("div","schedule-sources");accounts.forEach(a=>{if(a.sections?.timetable)sources.append(safeLink(a.sections.timetable.url,a.name+" · Librus ↗"))});p.append(sources,el("p","week-footnote","Godziny bez dojazdów. Odwołanie lekcji nie wyklucza wycieczki; sprawdź też frekwencję."));$("main").append(p);
 }
+
 function dates(){
  const actions=allActions().filter(a=>a.date).sort((a,b)=>a.date.localeCompare(b.date));
  if(actions.length){const p=panel("Z wiadomości i ustaleń");actions.forEach(a=>p.append(actionRow(a)));$("main").append(p)}
@@ -180,7 +257,7 @@ function grades(){
  if(!(sec.subjects||[]).some(s=>s.grades.length))wrap.append(empty("W Librusie nie ma jeszcze ocen bieżących."));
  const table=el("table"),thead=el("thead"),tr=el("tr");["Przedmiot","Okres 1","Okres 2","Roczna"].forEach(s=>tr.append(el("th","",s)));thead.append(tr);table.append(thead);const body=el("tbody");
  (sec.subjects||[]).forEach(s=>{const row=el("tr");row.append(el("td","",s.subject));[1,2].forEach(term=>{const td=el("td"),grades=s.grades.filter(g=>g.term===term);if(!grades.length)td.append(el("span","muted","Brak ocen"));grades.forEach(g=>{const d=el("details","grade");d.append(el("summary","",g.value),el("p","",g.details||"Brak dodatkowego opisu."));td.append(d)});const final=term===1?s.final1:s.final2;if(final&&final!=="-")td.append(el("p","annotation","Śródroczna: "+final));row.append(td)});row.append(el("td","",s.year==="-"?"—":s.year));body.append(row)});
- table.append(body);const scroll=el("div","table-wrap");scroll.append(table);wrap.append(scroll);
+ table.append(body);const scroll=el("div","table-wrap");scroll.append(table);if(!(sec.subjects||[]).some(s=>s.grades.length||[s.final1,s.final2,s.year].some(x=>x&&x!=="-"))){const catalog=el("details","subject-catalog");catalog.append(el("summary","","Lista przedmiotów · "+(sec.subjects||[]).length),scroll);wrap.append(catalog)}else wrap.append(scroll);
  if(sec.descriptive?.length){const h=el("h3","child-title","Oceny opisowe");h.classList.add("source-raw");wrap.append(h);sec.descriptive.forEach(d=>{const row=el("article","timeline-row");row.append(el("h4","",d.area),el("p","muted",d.text.trim()||"Brak wpisów."));if(d.details.length)row.append(el("p","",d.details.join("\n")));wrap.append(row)})}
  wrap.append(sectionReview(sec),raw(sec));p.append(wrap);
  });p.append(el("p","annotation","Średnie wyłączone przez szkołę nie są wyliczane przez Promenadę."));$("main").append(p);
