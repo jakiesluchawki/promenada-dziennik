@@ -1,6 +1,6 @@
 # Mahbrus iOS
 
-Prywatny rodzinny dziennik dla iPhone'a i iPada. Kandydat **1.0.0 (1)**, iOS 18+.
+Prywatny rodzinny dziennik dla iPhone'a i iPada. Wydanie TestFlight **1.0.0 (1)**, iOS 18+.
 Nazwa aplikacji i schematu: **Mahbrus**. Bundle ID: **pl.mahboob.mahbrus**.
 Promenada.xcodeproj to wewnętrzna nazwa projektu, zachowana po zmianie marki.
 
@@ -46,4 +46,6 @@ Archiwum do kontroli, jeszcze bez podpisu:
 
 Wyłącznie TestFlight Internal Only. ExportOptions.template.plist ma testFlightInternalTestingOnly=true; po rejestracji aplikacji trzeba uzupełnić konfigurację profilu i certyfikatu. To szablon, a nie gotowy profil podpisywania.
 
-Pozostały: rejestracja identyfikatora i karty Mahbrus w Apple, podpisanie, przesłanie oraz dodanie uprawnionych testerów. Nie wykonano uploadu ani publikacji w App Store.
+10 września 2026 zarejestrowano aplikację, podpisano archiwum istniejącym certyfikatem dystrybucyjnym i przesłano wersję 1.0.0 (1). Apple potwierdziło processingState=VALID oraz buildAudienceType=INTERNAL_ONLY. Build przypisano do wewnętrznej grupy „Mahbrus — rodzina”; pierwsze zaproszenie testera ma status INVITED. Dodano polski opis aplikacji i instrukcję testowania.
+
+App Store Connect ID: 6810649704. Build wygasa 9 grudnia 2026. Nie wykonano publicznej publikacji ani zgłoszenia do App Review. Dalsi testerzy wewnętrzni wymagają zaakceptowanego zaproszenia do App Store Connect i osobnego przypisania do grupy TestFlight.
