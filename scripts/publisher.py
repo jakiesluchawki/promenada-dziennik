@@ -29,6 +29,8 @@ def load_report():
     for a in digest.get("actions",[]):
         if a.get("source_id") and a["source_id"] not in ids:raise RuntimeError("Digest references an unknown source: "+a["source_id"])
     d["digest"]=digest
+    if os.environ.get("PARENT_REFRESH_CONFIG"):
+        d["refresh"]=json.loads(os.environ["PARENT_REFRESH_CONFIG"])
     names={k:v.get("display_name",k.capitalize()) for k,v in json.loads(secret("accounts")).items()}
     for key,a in d["accounts"].items():
         a["name"]=names[key]
@@ -67,11 +69,16 @@ def audit():
     credentials=secret("accounts")
     credential_values=[x for a in json.loads(credentials).values() for k,x in a.items() if k in ["login","password"]]
     needles=credential_values+[secret("site-password")]+[a["expected"] for a in json.loads(credentials).values()]
-    allowed={".git",".gitignore",".nojekyll","index.html","styles.css","app.js","favicon.svg","report.enc.json","ARTWORK.md","README.md","assets","fonts","scripts",".github","requirements.txt","_site","kompakt","ios"}
+    # Also scan enrolled student credentials when available locally or in Actions.
+    try:
+        student_accounts=json.loads(secret("student-accounts"))
+        needles += [value for account in student_accounts.values() for field,value in account.items() if field in ("login","password","expected")]
+    except (RuntimeError, OSError): pass
+    allowed={".git",".gitignore",".nojekyll","index.html","styles.css","app.js","favicon.svg","report.enc.json","ARTWORK.md","README.md","assets","fonts","scripts",".github","requirements.txt","_site","kompakt","ios","students","server","PRODUCT.md","DESIGN.md","tests"}
     for p in SITE.iterdir():
         if p.name not in allowed:raise RuntimeError("Unreviewed file in publishing folder: "+p.name)
     for p in SITE.rglob("*"):
-        if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts and p.suffix not in [".png",".jpg",".webp",".woff2"]:
+        if p.is_file() and not any(part in p.parts for part in [".git","__pycache__","node_modules",".netlify","_site","build"]) and p.suffix not in [".png",".jpg",".webp",".woff2"]:
             txt=p.read_text(errors="ignore")
             if any(n and n in txt for n in needles):raise RuntimeError("Plaintext private data found in "+p.name)
     return True

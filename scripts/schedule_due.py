@@ -25,11 +25,13 @@ def needs_collection(report, now):
     return False
 
 def main():
-    due = True
+    report_path = pathlib.Path(__file__).resolve().parent.parent / "report.enc.json"
+    report = publisher.decrypt(json.loads(report_path.read_text()), collector.secret("site-password"))
+    now = datetime.now(ZONE)
+    checked = datetime.fromisoformat(report["collected_at"].replace("Z", "+00:00"))
+    due = (now - checked).total_seconds() >= 300
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
-        report_path = pathlib.Path(__file__).resolve().parent.parent / "report.enc.json"
-        report = publisher.decrypt(json.loads(report_path.read_text()), collector.secret("site-password"))
-        due = needs_collection(report, datetime.now(ZONE))
+        due = due and needs_collection(report, now)
     with open(os.environ["GITHUB_OUTPUT"], "a") as out: out.write("due="+str(due).lower()+"\n")
     print("Collection is due." if due else "This collection window already has a healthy report; no Librus login needed.")
 

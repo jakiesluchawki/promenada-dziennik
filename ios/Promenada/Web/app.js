@@ -135,12 +135,14 @@ function render(){
  const expanded=new Set(Array.from(document.querySelectorAll("details[open][data-id]")).map(d=>d.dataset.id));
  releaseAttachments();
  $("children").replaceChildren();
- [["all","Oboje"],...Object.values(data.accounts).map(a=>[a.child,a.name])].forEach(([id,label])=>{const b=button(label,()=>{selected=id;query="";render()});b.setAttribute("aria-pressed",String(selected===id));$("children").append(b)});
+ const accounts=Object.values(data.accounts);
+ (accounts.length>1?[["all","Oboje"],...accounts.map(a=>[a.child,a.name])]:accounts.map(a=>[a.child,a.name])).forEach(([id,label])=>{const b=button(label,()=>{selected=id;query="";render()});b.setAttribute("aria-pressed",String(selected===id));$("children").append(b)});
+ $("children").hidden=accounts.length===1;
  $("updated").textContent="Odczyt: "+datePL(data.collected_at,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
  $("health").replaceChildren();
  const bad=Object.values(data.accounts).filter(a=>a.status!=="ok");
  if(bad.length){const n=el("div","notice");n.append(el("p","","Nie udało się odświeżyć konta: "+bad.map(a=>a.name).join(", ")+". Poniżej ostatni poprawny odczyt."));$("health").append(n)}
- if(missedCollection()){$("health").append(el("div","notice","Brakuje raportu z ostatniej pory odczytu. Serwer może jeszcze ponawiać zadanie. Widoczna data pokazuje rzeczywisty odczyt — przycisk sprawdzi, czy pojawił się nowszy plik."))}
+ if(missedCollection()){$("health").append(el("div","notice","Raport nie obejmuje ostatniej pory odczytu. Sprawdź nowszą wersję."))}
  $("nav").replaceChildren();
  const navNames={overview:"Sprawy",messages:"Poczta",timetable:"Plan",grades:"Oceny"};
  sections.forEach(([id,label])=>{
@@ -298,7 +300,7 @@ window.promenadaReceive=(report,status,saved)=>{
  $("gate").hidden=true;$("journal").hidden=false;$("lock").hidden=false;
  $("lock").textContent="Wyloguj";
  render();
- $("refresh").disabled=false;$("refresh").textContent="Sprawdź raport";
+ $("refresh").disabled=false;$("refresh").textContent="Odśwież z Librusa";
  $("sync-status").textContent=status||(before?(before===data.collected_at?"Masz najnowszy opublikowany raport.":"Wczytano nowszy raport."):"");
 };
 window.promenadaClear=()=>{
@@ -310,4 +312,7 @@ $("refresh").addEventListener("click",()=>{
  $("refresh").disabled=true;$("refresh").textContent="Sprawdzam…";nativeSend("refresh");
 });
 document.querySelector(".wordmark").removeAttribute("href");
+const published=button("Wczytaj raport",()=>nativeSend("published"),"quiet");
+published.id="published-refresh";
+$("refresh").after(published);
 nativeSend("ready");

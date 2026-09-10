@@ -1,12 +1,12 @@
 # Mahbrus iOS
 
-Prywatny rodzinny dziennik dla iPhone'a i iPada. Wydanie TestFlight **1.0.0 (1)**, iOS 18+.
+Prywatny rodzinny dziennik dla iPhone'a i iPada. Wydanie bazowe TestFlight **1.0.0 (1)**; kandydat **1.0.0 (2)**, iOS 18+.
 Nazwa aplikacji i schematu: **Mahbrus**. Bundle ID: **pl.mahboob.mahbrus**.
 Promenada.xcodeproj to wewnętrzna nazwa projektu, zachowana po zmianie marki.
 
 ## Działanie
 
-Aplikacja dołącza zaakceptowany kompaktowy interfejs i pobiera gotowy raport z istniejącego serwera. Harmonogram odczytu Librusa działa niezależnie od telefonu i Maca. Przycisk „Sprawdź raport” pobiera opublikowaną wersję; nie uruchamia dodatkowego logowania do Librusa.
+Aplikacja dołącza zaakceptowany kompaktowy interfejs i pobiera gotowy raport z istniejącego serwera. Harmonogram odczytu Librusa działa niezależnie od telefonu i Maca dwa razy dziennie dla raportu rodziców i ucznia. Przycisk „Odśwież z Librusa” zleca odczyt przez zabezpieczoną funkcję Netlify i czeka na publikację GitHub Actions. „Wczytaj raport” pobiera już opublikowaną wersję. Otwarcie aplikacji nie uruchamia kolektora.
 
 Hasło dziennika jest wpisywane raz. Po poprawnym odblokowaniu trafia do systemowego Keychain (WhenUnlockedThisDeviceOnly), bez synchronizacji przez iCloud. Raport jest odszyfrowywany lokalnie przez CryptoKit AES-GCM i CommonCrypto PBKDF2-SHA256. Paczka nie zawiera haseł ani danych uczniów.
 
@@ -49,3 +49,11 @@ Wyłącznie TestFlight Internal Only. ExportOptions.template.plist ma testFlight
 10 września 2026 zarejestrowano aplikację, podpisano archiwum istniejącym certyfikatem dystrybucyjnym i przesłano wersję 1.0.0 (1). Apple potwierdziło processingState=VALID oraz buildAudienceType=INTERNAL_ONLY. Build przypisano do wewnętrznej grupy „Mahbrus — rodzina”; pierwsze zaproszenie testera ma status INVITED. Dodano polski opis aplikacji i instrukcję testowania.
 
 App Store Connect ID: 6810649704. Build wygasa 9 grudnia 2026. Nie wykonano publicznej publikacji ani zgłoszenia do App Review. Dalsi testerzy wewnętrzni wymagają zaakceptowanego zaproszenia do App Store Connect i osobnego przypisania do grupy TestFlight.
+
+## Dostęp ucznia (build 2)
+
+Ten sam pakiet, wybór Rodzic / Uczeń przy pierwszym wejściu. Uczeń podaje login i hasło swojego zarejestrowanego konta Librusa. Hasło służy lokalnie do odszyfrowania osobnego raportu, a nie do logowania telefonu w Librusie. Odczyt serwerowy używa osobnych GitHub Secrets. Raport ucznia powstaje wyłącznie z konta potwierdzonego jako uczeń; błędy zachowują poprzedni raport ucznia i nigdy nie podstawiają rodzinnego.
+
+Osobna ścieżka szyfrogramu, kontrola audience/principal/role przed renderowaniem, odseparowane oznaczenia i cache. Stare rodzinne hasło w Keychain migruje automatycznie. Wylogowanie usuwa dostęp i lokalne szyfrogramy. Zmiana hasła Librusa wymaga aktualizacji sekretu kolektora i ponownego zaszyfrowania raportu.
+
+Bieżące oznaczenia nadal są lokalne na urządzeniu. Zmiany danych w Librusie są widoczne po odczycie i publikacji; przycisk nie oznacza natychmiastowej synchronizacji.

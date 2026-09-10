@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 os.umask(0o077)
 SERVICE=b"pl.mahboob.promenada.librus"
 def secret(account):
-    env_name={"accounts":"LIBRUS_ACCOUNTS","site-password":"SITE_PASSWORD"}.get(account)
+    env_name={"accounts":"LIBRUS_ACCOUNTS","site-password":"SITE_PASSWORD","student-accounts":"LIBRUS_STUDENT_ACCOUNTS"}.get(account)
     if env_name and os.environ.get(env_name): return os.environ[env_name]
     lib=ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
     f=lib.SecKeychainFindGenericPassword
@@ -46,6 +46,10 @@ def login(key):
     identity=doc.select_one("#user-section") or doc.select_one(".user-section")
     text=doc.get_text(" ",strip=True)
     if info["expected"] not in text or "wyloguj" not in page.text.lower(): raise RuntimeError("Account identity not confirmed")
+    role = "student" if re.search(r"jesteś zalogowany jako:.*?\(\s*uczeń\b", text, re.I) else "parent" if re.search(r"jesteś zalogowany jako:.*?\(\s*rodzic\b", text, re.I) else None
+    if role != info.get("role", "parent"):
+        s.close()
+        raise RuntimeError("Account role not confirmed")
     return s,doc,page.text
 
 def text_clean(el):
@@ -250,7 +254,7 @@ def main():
             new_ids=[x["id"] for x in data["messages"]+data["announcements"] if x["id"] not in old_ids]
             data["new_ids"]=new_ids
             snapshot["accounts"][key]=data
-            print(json.dumps({"child":key,"status":"ok","messages":len(data["messages"]),"announcements":len(data["announcements"]),"new":len(new_ids),"timetable_days":len(data["sections"]["timetable"]["days"])},ensure_ascii=False))
+            print(json.dumps({"child":key,"status":"ok","messages":len(data["messages"]),"announcements":len(data["announcements"]),"new":len(new_ids),"timetable_days":len(data["sections"].get("timetable",{}).get("days",[]))},ensure_ascii=False))
         except Exception as e:
             data=dict(old);data["status"]="error";data["error"]=str(e);data["child"]=key
             snapshot["accounts"][key]=data

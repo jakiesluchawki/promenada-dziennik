@@ -13,3 +13,7 @@ ios/build/
 ios/**/xcuserdata/
 *.xcarchive/
 *.ipa
+server/node_modules/
+server/.netlify/
+
+**/__pycache__/

@@ -12,7 +12,7 @@ window.promenadaReceive=(report,status,saved)=>{
  $("gate").hidden=true;$("journal").hidden=false;$("lock").hidden=false;
  $("lock").textContent="Wyloguj";
  render();
- $("refresh").disabled=false;$("refresh").textContent="Sprawdź raport";
+ $("refresh").disabled=false;$("refresh").textContent="Odśwież z Librusa";
  $("sync-status").textContent=status||(before?(before===data.collected_at?"Masz najnowszy opublikowany raport.":"Wczytano nowszy raport."):"");
 };
 window.promenadaClear=()=>{
@@ -24,4 +24,7 @@ $("refresh").addEventListener("click",()=>{
  $("refresh").disabled=true;$("refresh").textContent="Sprawdzam…";nativeSend("refresh");
 });
 document.querySelector(".wordmark").removeAttribute("href");
+const published=button("Wczytaj raport",()=>nativeSend("published"),"quiet");
+published.id="published-refresh";
+$("refresh").after(published);
 nativeSend("ready");

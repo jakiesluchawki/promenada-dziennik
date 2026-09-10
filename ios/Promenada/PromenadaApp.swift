@@ -12,6 +12,8 @@ struct JournalView: View {
     @StateObject private var model = JournalModel()
     @Environment(\.scenePhase) private var phase
     @State private var password = ""
+    @State private var login = ""
+    @State private var role = "parent"
     @State private var showPassword = false
     @State private var forget = false
     private let pink = Color(red: 1, green: 0.882, blue: 0.922)
@@ -27,13 +29,23 @@ struct JournalView: View {
                         Spacer(minLength: 16)
                         Image("House").resizable().scaledToFit().frame(width: 124, height: 112).accessibilityHidden(true)
                         Text("Szkolne sprawy\npod ręką.").font(.custom("Romie-Regular", size: 36, relativeTo: .largeTitle)).fixedSize(horizontal: false, vertical: true)
-                        Text("Wiadomości, plan lekcji i sprawy do dopilnowania — dla Was obojga.")
+                        Text("Wiadomości, plan lekcji i sprawy do dopilnowania.")
                             .font(.custom("Roobert-Regular", size: 17, relativeTo: .body)).foregroundStyle(ink.opacity(0.8))
                         if model.busy {
                             ProgressView("Otwieram dziennik…").tint(ink).padding(.vertical)
                         } else {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Hasło do dziennika").font(.custom("Roobert-Bold", size: 15, relativeTo: .subheadline))
+                                Picker("Dostęp", selection: $role) {
+                                    Text("Rodzic").tag("parent")
+                                    Text("Uczeń").tag("student")
+                                }.pickerStyle(.segmented).accessibilityIdentifier("journal-role")
+                                if role == "student" {
+                                    TextField("Login ucznia w Librusie", text: $login)
+                                        .textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
+                                        .padding(15).background(.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 16))
+                                        .accessibilityIdentifier("journal-login")
+                                }
+                                Text(role == "student" ? "Hasło ucznia w Librusie" : "Hasło do dziennika").font(.custom("Roobert-Bold", size: 15, relativeTo: .subheadline))
                                 Group {
                                     if showPassword { TextField("Hasło do dziennika", text: $password) }
                                     else { SecureField("Hasło do dziennika", text: $password) }
@@ -44,7 +56,7 @@ struct JournalView: View {
                                 Toggle("Pokaż hasło", isOn: $showPassword).font(.custom("Roobert-Regular", size: 15, relativeTo: .subheadline)).tint(ink)
                                 Button(action: unlock) { Text("Otwórz dziennik").frame(maxWidth: .infinity).padding(16) }
                                     .buttonStyle(.plain).background(ink, in: Capsule()).foregroundStyle(.white)
-                                    .disabled(password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                    .disabled(password.isEmpty || (role == "student" && login.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                                     .accessibilityIdentifier("journal-unlock")
                                 Text("Wpisujesz je tylko pierwszy raz. Ten iPhone zapamięta dostęp w pęku kluczy.")
                                     .font(.custom("Roobert-Regular", size: 13, relativeTo: .footnote)).foregroundStyle(ink.opacity(0.8))
@@ -70,9 +82,9 @@ struct JournalView: View {
         .sheet(item: $model.attachment, onDismiss: { model.removeShare() }) { item in ShareSheet(url: item.url) }
     }
     private func unlock() {
-        let value = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = password
         password = ""
-        model.unlock(value)
+        model.unlock(JournalAccess(role: role, login: login.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), password: value))
     }
 }
 

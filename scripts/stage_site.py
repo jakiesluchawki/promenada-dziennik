@@ -10,6 +10,12 @@ def stage(root):
     out.mkdir()
     for name in PUBLIC_FILES:shutil.copy2(root/name,out/name)
     for name in PUBLIC_DIRS:shutil.copytree(root/name,out/name)
+    students = root / "students"
+    if students.is_dir():
+        (out/"students").mkdir()
+        for source in students.glob("*.enc.json"):
+            if re.fullmatch(r"[a-f0-9]{64}\.enc\.json", source.name):
+                shutil.copy2(source, out/"students"/source.name)
     for folder in [out,out/"kompakt"]:
         page=folder/"index.html";html=page.read_text()
         for name in ["styles.css","app.js"]:

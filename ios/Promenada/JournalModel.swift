@@ -16,7 +16,10 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
     private var ready = false
     private var sharingURL: URL?
     private let webRoot = Bundle.main.resourceURL!.appendingPathComponent("Web", isDirectory: true)
-    private let reviewKey = "promenada-review-v1"
+    private var access: JournalAccess?
+    private var refreshConfig: RefreshConfiguration?
+    private var refreshTask: Task<Void, Never>?
+    private var reviewKey: String { access?.role == "student" ? "mahbrus-review-student-" + access!.principal : "promenada-review-v1" }
 
     func makeWebView() -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -52,8 +55,9 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
         switch action {
         case "ready":
             guard !ready else { return }; ready = true
-            if let password = AccessKey.read() { unlock(password) } else { busy = false }
-        case "refresh": if let password = AccessKey.read() { unlock(password, refreshing: true) }
+            if let saved = AccessKey.read() { unlock(JournalAccess.restore(saved)) } else { busy = false }
+        case "refresh": requestRefresh()
+        case "published": if let access { unlock(access, refreshing: true) }
         case "forget": confirmForget = true
         case "review":
             if let value = body["value"] as? String, value.utf8.count < 1_000_000,
@@ -78,15 +82,19 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
         default: break
         }
     }
-    func unlock(_ password: String, refreshing: Bool = false) {
-        guard ready, !password.isEmpty, !busy || !open else { return }
+    func unlock(_ credentials: JournalAccess, refreshing: Bool = false) {
+        guard ready, !credentials.password.isEmpty, !busy || !open else { return }
         busy = true; error = ""
         let requestGeneration = generation
         Task {
             do {
-                let result = try await store.load(password: password)
+                let result = try await store.load(access: credentials)
                 guard generation == requestGeneration else { return }
-                try AccessKey.save(password)
+                try AccessKey.save(credentials.encoded)
+                access = credentials
+                if let bytes = result.text.data(using: .utf8), let report = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any], let config = report["refresh"], let json = try? JSONSerialization.data(withJSONObject: config) {
+                    refreshConfig = try? JSONDecoder().decode(RefreshConfiguration.self, from: json)
+                } else { refreshConfig = nil }
                 let review = UserDefaults.standard.string(forKey: reviewKey) ?? "{\"read\":{},\"done\":{},\"priority\":{}}"
                 let message = result.offline ? "Bez połączenia z serwerem. Pokazuję ostatni zapisany raport." : ""
                 _ = try await web?.callAsyncJavaScript(
@@ -102,25 +110,53 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
             if generation == requestGeneration { busy = false; sendBusy(false) }
         }
     }
-    func foreground() {
-        if open && !busy && Date().timeIntervalSince(lastCheck) > 60, let password = AccessKey.read() {
-            unlock(password, refreshing: true)
+    func foreground() {} // No collector dispatch on launch or foreground.
+    private func requestRefresh() {
+        guard !busy, let access else { return }
+        guard let refreshConfig else {
+            sendStatus("Uruchamianie odczytu nie jest jeszcze skonfigurowane. Przycisk „Wczytaj raport” pobierze ostatnią publikację."); return
+        }
+        busy = true; sendBusy(true)
+        let requestGeneration = generation
+        refreshTask = Task {
+            do {
+                var state = try await refreshConfig.request(start: true)
+                guard requestGeneration == generation else { return }
+                sendStatus(state.message)
+                let deadline = Date().addingTimeInterval(12 * 60)
+                while state.pending && Date() < deadline {
+                    try await Task.sleep(for: .seconds(8))
+                    try Task.checkCancellation()
+                    state = try await refreshConfig.request(start: false, run: state.run)
+                    guard requestGeneration == generation else { return }
+                    sendStatus(state.message)
+                }
+                guard requestGeneration == generation else { return }
+                busy = false
+                if state.state == "complete" || state.state == "cooldown" { unlock(access, refreshing: true) }
+                else { sendStatus(state.pending ? "Odczyt nadal trwa. Wczytaj raport za chwilę." : state.message); sendBusy(false) }
+            } catch {
+                guard requestGeneration == generation else { return }
+                busy = false; sendStatus("Nie udało się sprawdzić odczytu. Jeśli już wystartował, dokończy się na serwerze. Wczytaj raport za chwilę."); sendBusy(false)
+            }
         }
     }
     func forget() {
         generation += 1
+        refreshTask?.cancel(); refreshTask = nil
         AccessKey.remove()
         UserDefaults.standard.removeObject(forKey: reviewKey)
+        access = nil; refreshConfig = nil
         open = false; busy = true; error = ""
         Task { await store.clear(); busy = false }
         removeShare()
         web?.evaluateJavaScript("window.promenadaClear()")
     }
     private func sendStatus(_ text: String) {
-        web?.callAsyncJavaScript("document.getElementById('sync-status').textContent = text; document.getElementById('refresh').disabled = false; document.getElementById('refresh').textContent = 'Sprawdź raport';", arguments: ["text": text], in: nil, in: .page, completionHandler: nil)
+        web?.callAsyncJavaScript("document.getElementById('sync-status').textContent = text; ", arguments: ["text": text], in: nil, in: .page, completionHandler: nil)
     }
     private func sendBusy(_ value: Bool) {
-        web?.callAsyncJavaScript("document.getElementById('refresh').disabled = value; document.getElementById('refresh').textContent = value ? 'Sprawdzam…' : 'Sprawdź raport';", arguments: ["value": value], in: nil, in: .page, completionHandler: nil)
+        web?.callAsyncJavaScript("document.getElementById('refresh').disabled = value; document.getElementById('refresh').textContent = value ? 'Sprawdzam…' : 'Odśwież z Librusa';", arguments: ["value": value], in: nil, in: .page, completionHandler: nil)
     }
     func removeShare() {
         if let sharingURL { try? FileManager.default.removeItem(at: sharingURL) }
