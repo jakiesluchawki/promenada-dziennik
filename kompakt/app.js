@@ -140,7 +140,7 @@ function render(){
   b.append(uiIcon(id),el("span","nav-label",navNames[id]||label));b.setAttribute("aria-label",label);
   const n=newCount(id);if(n)b.append(el("span","nav-count",String(n)));if(id===current)b.setAttribute("aria-current","page");$("nav").append(b);
  });
- const more=button("",()=>navigate("more"),"nav-more");more.setAttribute("aria-label","Więcej działów");more.append(uiIcon("more"),el("span","nav-label","Więcej"));if(!primarySections.includes(current))more.setAttribute("aria-current","page");$("nav").append(more);
+ const more=button("",()=>navigate("more"),"nav-more");more.setAttribute("aria-label","Więcej działów");more.append(uiIcon("more"),el("span","nav-label","Więcej"));const otherNew=sections.filter(([id])=>!primarySections.includes(id)).reduce((total,[id])=>total+newCount(id),0);if(otherNew)more.append(el("span","nav-count",String(otherNew)));if(!primarySections.includes(current))more.setAttribute("aria-current","page");$("nav").append(more);
  const spec=compactTitles[current]||compactTitles.overview,hero=el("header","section-hero");
  hero.append(el("h1","",spec[0]),el("p","",spec[1]));$("main").replaceChildren(hero);
  ({overview,documents,messages:documents,announcements:documents,timetable,dates,grades,attendance,notes:simple,homework,achievements:simple,more:moreSections}[current])();
