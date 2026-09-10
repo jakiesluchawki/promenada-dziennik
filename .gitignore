@@ -7,3 +7,9 @@ scripts/snapshot.json
 scripts/digest.json
 scripts/*-state.json
 scripts/out.txt
+
+# Native build output and local Xcode state
+ios/build/
+ios/**/xcuserdata/
+*.xcarchive/
+*.ipa

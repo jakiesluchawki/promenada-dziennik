@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffe1eb">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>Mahbrus · Rodzinny dziennik</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./styles.css">
+<script src="./app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Przejdź do treści</a>
+<header class="masthead">
+ <div class="brand"><a class="wordmark" href="./">mahbrus</a></div>
+ <div class="mast-actions"><button id="lock" class="quiet" hidden>Zamknij</button></div>
+</header>
+<section id="gate" class="gate" aria-labelledby="gate-title">
+ <div class="gate-copy"><p class="eyebrow">Rodzinny dziennik</p><h1 id="gate-title">Szkolne sprawy<br>pod ręką.</h1><p class="lead">Wiadomości, plan lekcji i sprawy do dopilnowania w jednym miejscu.</p>
+ <form id="unlock-form"><label for="password">Hasło do dziennika</label><div class="password-row"><input id="password" type="password" autocomplete="current-password" required spellcheck="false" autocapitalize="none"><button id="unlock" type="submit">Otwórz</button></div><label class="check"><input id="show-password" type="checkbox">Pokaż hasło</label><p id="gate-status" class="form-status" role="status" aria-live="polite"></p></form>
+ <p class="privacy-note">Treść dziennika odsłania się po podaniu hasła.</p></div>
+</section>
+<div id="journal" hidden>
+ <div class="journal-toolbar"><div id="children" class="segmented" aria-label="Wybór dziecka"></div><div class="sync"><span id="updated"></span><button id="refresh" class="quiet" type="button">Sprawdź raport</button></div></div>
+ <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p><div id="health"></div>
+ <div class="journal-layout"><nav id="nav" aria-label="Działy dziennika"></nav><main id="main" tabindex="-1"></main></div>
+</div>
+<footer><span>Mahbrus · rodzinny dziennik</span></footer>
+<noscript>Włącz JavaScript, aby odszyfrować i otworzyć dziennik.</noscript>
+</body>
+</html>
