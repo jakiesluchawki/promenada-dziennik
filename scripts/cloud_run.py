@@ -29,7 +29,7 @@ def main():
     public=ROOT/"_site";public.mkdir(exist_ok=True)
     for name in ["index.html","styles.css","app.js","favicon.svg","report.enc.json",".nojekyll"]:
         shutil.copy2(ROOT/name,public/name)
-    for name in ["assets","fonts"]:
+    for name in ["assets","fonts","kompakt"]:
         shutil.copytree(ROOT/name,public/name,dirs_exist_ok=True)
     with open(os.environ.get("GITHUB_OUTPUT",str(BASE/"out.txt")),"a") as f:f.write("healthy="+("false" if failed else "true")+"\n")
     for p in ["snapshot.json","digest.json","published-state.json","snapshot.tmp","report.enc.tmp"]:

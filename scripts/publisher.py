@@ -67,7 +67,7 @@ def audit():
     credentials=secret("accounts")
     credential_values=[x for a in json.loads(credentials).values() for k,x in a.items() if k in ["login","password"]]
     needles=credential_values+[secret("site-password")]+[a["expected"] for a in json.loads(credentials).values()]
-    allowed={".git",".gitignore",".nojekyll","index.html","styles.css","app.js","favicon.svg","report.enc.json","ARTWORK.md","README.md","assets","fonts","scripts",".github","requirements.txt","_site"}
+    allowed={".git",".gitignore",".nojekyll","index.html","styles.css","app.js","favicon.svg","report.enc.json","ARTWORK.md","README.md","assets","fonts","scripts",".github","requirements.txt","_site","kompakt"}
     for p in SITE.iterdir():
         if p.name not in allowed:raise RuntimeError("Unreviewed file in publishing folder: "+p.name)
     for p in SITE.rglob("*"):
