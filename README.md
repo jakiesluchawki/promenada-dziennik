@@ -16,7 +16,7 @@ Odczyt treści wiadomości może oznaczyć je jako przeczytane w Librusie. Prome
 Ilustracje i prompty: [ARTWORK.md](ARTWORK.md).
 
 ## Automatyczny odczyt
-GitHub Actions planuje odczyt kont o 07:07 i 18:07 w strefie Europe/Warsaw, szyfruje raport i publikuje go w Pages. Komputer domowy może być wyłączony. Harmonogram może być opóźniony albo pominąć uruchomienie. Ponowienia co godzinę do 10:07 i 21:07 sprawdzają, czy oba konta mają już poprawny odczyt z danej pory; wtedy pomijają ponowne logowanie. Przycisk „Sprawdź raport” pobiera ostatni raport i informuje, czy pojawił się nowszy plik; ręczny odczyt uruchamia się przez Run workflow w Actions.
+GitHub Actions planuje odczyt kont o 07:07 i 18:07 w strefie Europe/Warsaw, szyfruje raport i publikuje go w Pages. Komputer domowy może być wyłączony. Harmonogram może być opóźniony albo pominąć uruchomienie. Przycisk „Sprawdź raport” pobiera ostatni raport i informuje, czy pojawił się nowszy plik; w aplikacji iOS przycisk „Odśwież z Librusa” uruchamia nowy odczyt przez zabezpieczoną funkcję Netlify i czeka na opublikowanie raportu. Oznaczenia pozostają lokalne na urządzeniu, zgodnie z decyzją rodziny.
 
 Sekrety LIBRUS_ACCOUNTS i SITE_PASSWORD są przekazywane wyłącznie do etapu kolektora. Artefakt Pages zawiera tylko dozwolone pliki interfejsu i szyfrogram. Przy błędzie konta zachowywany jest ostatni poprawny odczyt oraz ostrzeżenie.
 

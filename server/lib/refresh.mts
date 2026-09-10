@@ -19,9 +19,12 @@ export async function handle(req: Request, env: Settings, fetcher: typeof fetch 
   const root = 'https://api.github.com/repos/jakiesluchawki/promenada-dziennik/actions';
   async function github(path: string, method = 'GET', body?: object) {
     const response = await fetcher(root + path, { method, redirect: 'error', signal: AbortSignal.timeout(15000),
-      headers: { Authorization: `Bearer ${env.githubToken}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${env.githubToken.trim()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}) });
-    if (!response.ok) throw new Error('GitHub unavailable');
+    if (!response.ok) {
+      console.error('mahbrus_refresh_github', { status: response.status, method, workflow });
+      throw new Error('GitHub unavailable');
+    }
     return response.status === 204 ? null : await response.json();
   }
   try {
@@ -44,5 +47,5 @@ export async function handle(req: Request, env: Settings, fetcher: typeof fetch 
     // Neither workflow, ref nor inputs are accepted from the client.
     await github(`/workflows/${workflow}/dispatches`, 'POST', { ref: 'main' });
     return reply('queued', 'Odczyt zlecony. Czekam na GitHub Actions…', 202, 'after:' + (latest?.id || 0));
-  } catch { return reply('error', 'Serwer odświeżania jest chwilowo niedostępny. Spróbuj później.', 503); }
+  } catch (error) { console.error('mahbrus_refresh_error', { type: error instanceof Error ? error.name : 'unknown' }); return reply('error', 'Serwer odświeżania jest chwilowo niedostępny. Spróbuj później.', 503); }
 }

@@ -1,6 +1,6 @@
 # Mahbrus iOS
 
-Prywatny rodzinny dziennik dla iPhone'a i iPada. Wydanie bazowe TestFlight **1.0.0 (1)**; kandydat **1.0.0 (2)**, iOS 18+.
+Prywatny rodzinny dziennik dla iPhone'a i iPada. Aktualne wydanie TestFlight **1.0.0 (2)**, iOS 18+.
 Nazwa aplikacji i schematu: **Mahbrus**. Bundle ID: **pl.mahboob.mahbrus**.
 Promenada.xcodeproj to wewnętrzna nazwa projektu, zachowana po zmianie marki.
 
@@ -57,3 +57,19 @@ Ten sam pakiet, wybór Rodzic / Uczeń przy pierwszym wejściu. Uczeń podaje lo
 Osobna ścieżka szyfrogramu, kontrola audience/principal/role przed renderowaniem, odseparowane oznaczenia i cache. Stare rodzinne hasło w Keychain migruje automatycznie. Wylogowanie usuwa dostęp i lokalne szyfrogramy. Zmiana hasła Librusa wymaga aktualizacji sekretu kolektora i ponownego zaszyfrowania raportu.
 
 Bieżące oznaczenia nadal są lokalne na urządzeniu. Zmiany danych w Librusie są widoczne po odczycie i publikacji; przycisk nie oznacza natychmiastowej synchronizacji.
+
+## Stan builda 2 — 10 września 2026, wieczór
+
+Build 1.0.0 (2) przesłano, Apple potwierdziło VALID / INTERNAL_ONLY oraz IN_BETA_TESTING. Jest przypisany do grupy „Mahbrus — rodzina”. Instalacja builda 2 przez właściciela jest widoczna w App Store Connect; nie zastępuje to pełnej weryfikacji na urządzeniach wszystkich testerów.
+
+Konto Kostka zaakceptowało zaproszenie App Store Connect, ma rolę Marketing ograniczoną do Mahbrusa i zostało dodane do grupy wewnętrznej. Apple API przyjęło ponowne wysłanie zaproszenia TestFlight. Kostek zainstalował aplikację; potwierdził to użytkownik oraz API Apple (stan INSTALLED). Panel wcześniej pokazywał „No Builds Available”; dokładna przyczyna rozbieżności nie została ustalona. Dodatkową grupę diagnostyczną usunięto po sprawdzeniu, że Kostek i build 2 pozostają w grupie rodzinnej.
+
+Weryfikacja nowego zakresu: sześć testów bramki odświeżania, cztery testy granicy raportu ucznia i ochrony przed powtórnymi odczytami oraz cztery scenariusze iPhone'a (rodzic, uczeń, odrzucenie raportu rodzica w trybie ucznia, działy i załączniki). Scenariusz załącznika przeszedł po poprawieniu przewijania w samym teście. Zbiory danych do testów UI są fikcyjne.
+
+Oba rzeczywiste odczyty GitHub Actions i publikacje Pages zakończyły się powodzeniem: rodzice — run 34523713250, uczeń — run 34523709943. Harmonogramy obu raportów: 07:07 i 18:07 Europe/Warsaw.
+
+**Ręczne odświeżanie uruchomione:** projekt Netlify mahbrus-refresh korzysta z klucza przechowywanego jako sekret środowiska produkcyjnego. Serwer przechowuje osobne skróty uprawnień rodzica i ucznia. Dnia 10 września 2026 zweryfikowano pełną ścieżkę przycisku: autoryzowany POST → GitHub Actions → poprawne zakończenie → nowszy raport pobrany z Pages i odszyfrowany w pamięci. Rodzice: run 34528942367, odczyt 20:52:45 UTC; uczeń: run 34528945652, odczyt 20:53:27 UTC. Poprzednie oba raporty pochodziły z 20:00 UTC. Końcowy deploy funkcji: 6aa318522a4972bc0ce9ff13. Nie było potrzeby zmiany builda iOS.
+
+Klucz GitHuba jest ograniczony do repozytorium promenada-dziennik, Actions read/write i wymaganych Metadata read, z terminem do 30 czerwca 2027. Nie trafia do aplikacji ani zaszyfrowanego raportu. Diagnostyka zapisuje wyłącznie kod odpowiedzi GitHuba, metodę, nazwę workflow i typ błędu, bez tokenów i danych szkolnych. Sześć testów bramki przechodzi po dodaniu diagnostyki i usuwania białych znaków z końców wklejonego klucza.
+
+**Ustalona decyzja produktu:** oznaczenia „przeczytane”, „zrobione” i priorytety pozostają lokalne dla urządzenia. Nie synchronizujemy ich między członkami rodziny ani nie wysyłamy tych zmian do Librusa. Ręczne odświeżanie zleca odczyt; po jego zakończeniu aplikacja pobiera opublikowany raport. Minimalny odstęp między kolejnymi próbami wynosi 5 minut; kliknięcie podczas trwającego odczytu dołącza do sprawdzania jego stanu.
