@@ -75,6 +75,13 @@ function raw(section){const d=el("details","source-raw");d.append(el("summary","
 function navigate(id){current=id;query="";attentionFilter="all";render();$("main").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"})}
 function getDocuments(){return Object.values(data.accounts).flatMap(a=>[...(a.messages||[]),...(a.announcements||[])])}
 function openSource(id,fallback){const m=getDocuments().find(m=>m.id===id);if(m){current=m.kind==="announcement"?"announcements":"messages";selected=m.child;query="";render();const d=Array.from(document.querySelectorAll(".document")).find(x=>x.dataset.id===id);if(d){d.open=true;d.scrollIntoView({block:"start",behavior:"smooth"})}}else navigate(fallback||"dates")}
+function missedCollection(){
+ const parts=d=>Object.fromEntries(new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(d).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+ const now=parts(new Date()),read=parts(new Date(data.collected_at)),today=now.year+"-"+now.month+"-"+now.day,readAt=read.year+"-"+read.month+"-"+read.day+"T"+read.hour+":"+read.minute;
+ const hour=+now.hour;
+ const target=hour>=19?"18:00":hour>=8?"07:00":null;
+ return target?readAt<today+"T"+target:Date.now()-new Date(data.collected_at).getTime()>15*3600000;
+}
 function render(){
  if(!data)return;
  releaseAttachments();
@@ -84,7 +91,7 @@ function render(){
  $("health").replaceChildren();
  const bad=Object.values(data.accounts).filter(a=>a.status!=="ok");
  if(bad.length){const n=el("div","notice");n.append(el("p","","Nie udało się odświeżyć konta: "+bad.map(a=>a.name).join(", ")+". Poniżej ostatni poprawny odczyt."));$("health").append(n)}
- if(Date.now()-new Date(data.collected_at).getTime()>26*3600000){$("health").append(el("div","notice","Raport ma ponad dobę. Automatyczny odczyt w chmurze wymaga sprawdzenia. Na razie korzystasz z ostatnio pobranych danych."))}
+ if(missedCollection()){$("health").append(el("div","notice","Brakuje raportu z ostatniej pory odczytu. Serwer może jeszcze ponawiać zadanie. Widoczna data pokazuje rzeczywisty odczyt — przycisk sprawdzi, czy pojawił się nowszy plik."))}
  $("nav").replaceChildren();
  sections.forEach(([id,label],i)=>{const b=button("",()=>navigate(id));b.append(el("span","",String(i+1).padStart(2,"0")),el("span","",label));const n=newCount(id);if(n)b.append(el("span","nav-count",String(n)));if(id===current)b.setAttribute("aria-current","page");$("nav").append(b)});
  const spec=sections.find(x=>x[0]===current), hero=el("header","section-hero"),copy=el("div");
@@ -218,9 +225,19 @@ $("unlock-form").addEventListener("submit",async e=>{
  finally{$("unlock").disabled=false}
 });
 $("show-password").addEventListener("change",e=>{$("password").type=e.target.checked?"text":"password"});
-function lock(){releaseAttachments();data=null;keyMaterial=null;selected="all";current="overview";query="";$("main").replaceChildren();$("children").replaceChildren();$("nav").replaceChildren();$("health").replaceChildren();$("updated").textContent="";$("journal").hidden=true;$("gate").hidden=false;$("lock").hidden=true;$("password").type="password";$("show-password").checked=false;$("password").value="";window.scrollTo({top:0,behavior:"instant"})}
+function lock(){releaseAttachments();data=null;keyMaterial=null;selected="all";current="overview";query="";$("main").replaceChildren();$("children").replaceChildren();$("nav").replaceChildren();$("health").replaceChildren();$("updated").textContent="";$("sync-status").textContent="";$("journal").hidden=true;$("gate").hidden=false;$("lock").hidden=true;$("password").type="password";$("show-password").checked=false;$("password").value="";window.scrollTo({top:0,behavior:"instant"})}
 $("lock").addEventListener("click",lock);
-$("refresh").addEventListener("click",async()=>{if(!keyMaterial)return;$("refresh").disabled=true;$("refresh").textContent="Wczytuję…";try{const fresh=await decrypt(await fetchReport(),keyMaterial);if(keyMaterial){data=fresh;render()}}catch{$("health").replaceChildren(el("div","notice","Nie udało się wczytać nowszego raportu. Oglądasz ostatnio otwartą wersję."))}finally{$("refresh").disabled=false;$("refresh").textContent="Wczytaj nowszy raport"}});
+$("refresh").addEventListener("click",async()=>{
+ if(!keyMaterial)return;const material=keyMaterial;const before=data?.collected_at;
+ $("refresh").disabled=true;$("refresh").textContent="Sprawdzam…";$("sync-status").textContent="";
+ try{
+  const fresh=await decrypt(await fetchReport(),material);
+  if(keyMaterial!==material)return;
+  data=fresh;render();
+  $("sync-status").textContent=fresh.collected_at===before?"Masz najnowszy opublikowany raport. Ten przycisk sprawdza gotowe raporty; odczyt Librusa odbywa się rano i wieczorem.":"Wczytano raport z "+datePL(fresh.collected_at,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+".";
+ }catch{if(keyMaterial===material)$("sync-status").textContent="Nie udało się pobrać raportu. Oglądasz ostatnio otwartą wersję."}
+ finally{$("refresh").disabled=false;$("refresh").textContent="Sprawdź raport"}
+});
 ["pointerdown","keydown"].forEach(type=>document.addEventListener(type,()=>activity=Date.now(),{passive:true}));
 setInterval(()=>{if(data&&Date.now()-activity>30*60*1000)lock()},60000);
 window.addEventListener("pagehide",lock);

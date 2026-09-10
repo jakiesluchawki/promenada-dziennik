@@ -2,7 +2,7 @@ name: Update private school report
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 7,18 * * *'
+    - cron: '7 7-10,18-21 * * *'
       timezone: 'Europe/Warsaw'
 permissions:
   contents: write
@@ -25,13 +25,20 @@ jobs:
           python-version: '3.12'
       - name: Install collector dependencies
         run: python -m pip install --disable-pip-version-check -q -r requirements.txt
+      - name: Check whether this collection window is already covered
+        id: due
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: python scripts/schedule_due.py
       - name: Read Librus and encrypt the report
         id: collect
+        if: steps.due.outputs.due == 'true'
         env:
           LIBRUS_ACCOUNTS: ${{ secrets.LIBRUS_ACCOUNTS }}
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: python scripts/cloud_run.py
       - name: Save only the encrypted snapshot
+        if: steps.due.outputs.due == 'true'
         run: |
           git config user.name "Promenada"
           git config user.email "promenada@users.noreply.github.com"
@@ -39,15 +46,18 @@ jobs:
           git commit -m "Refresh encrypted report"
           git push origin main
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+        if: steps.due.outputs.due == 'true'
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        if: steps.due.outputs.due == 'true'
         with:
           path: '_site'
           retention-days: 1
       - name: Publish the updated site
         id: deployment
+        if: steps.due.outputs.due == 'true'
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
       - name: Surface collection problems
-        if: steps.collect.outputs.healthy != 'true'
+        if: steps.due.outputs.due == 'true' && steps.collect.outputs.healthy != 'true'
         run: |
           echo "The published report contains an account warning. Check the private dashboard."
           exit 1
