@@ -1,6 +1,6 @@
 # Mahbrus iOS
 
-Prywatny rodzinny dziennik dla iPhone'a i iPada. Przygotowywana aktualizacja TestFlight **1.0.0 (3)**, iOS 18+.
+Prywatny rodzinny dziennik dla iPhone'a i iPada. Aktualne wydanie TestFlight **1.0.0 (3)**, iOS 18+.
 Nazwa aplikacji i schematu: **Mahbrus**. Bundle ID: **pl.mahboob.mahbrus**.
 Promenada.xcodeproj to wewnętrzna nazwa projektu, zachowana po zmianie marki.
 
@@ -19,6 +19,10 @@ Interfejs zawiera sprawy, pocztę, ogłoszenia, plan lekcji, terminy, oceny, fre
 Przy zapamiętanym dostępie aplikacja pokazuje zweryfikowany lokalny szyfrogram od razu i pobiera aktualną publikację w tle. Powrót na pierwszy plan sprawdza gotowy plik (najczęściej raz na 30 sekund, bez powielania trwających operacji). Nie wysyła POST do kolektora. Nie resetuje lokalnych oznaczeń; niezmieniony raport nie przebudowuje otwartego widoku. Zmiana dnia odświeża jednak informację o świeżości. Offline pozostaje ostatni raport z komunikatem. Nowe dane nadal przechodzą walidację granicy rodzic/uczeń przed zapisem i wyświetleniem.
 
 Nowy harmonogram serwerowy: rodzice 06:30/18:00, uczeń 06:32/18:02 czasu Warszawy, z kontrolą i ograniczonymi ponowieniami po 10 i 20 minutach. Szczegóły i ograniczenia: server/README.md. Starsze wpisy poniżej dokumentują stan poprzednich wydań.
+
+11 września 2026: pięć scenariuszy iPhone'a przeszło (cztery istniejące i nowy test powrotu na pierwszy plan z nowym raportem oraz zachowaniem odczytanych wiadomości). Nowy test wymagał poprawienia przewijania do przycisku. Przeszło 15 testów funkcji oraz 7 testów kolektora, izolacji i świeżości. Build 575c073e-b807-4ecf-8c8c-89f93ea38444: VALID, INTERNAL_ONLY, IN_BETA_TESTING; przypisanie do istniejącej grupy „Mahbrus — rodzina” potwierdzone przez API Apple. Podpisany i sprawdzony na Mac Studio; przesyłanie zakończone EXPORT SUCCEEDED. Instalacja nowego builda na fizycznych telefonach pozostaje po stronie testerów.
+
+Produkcyjny deploy Netlify: 6aa3e033b16bcb9b85933eda. API potwierdziło obecność obu harmonogramów. GitHub runs 34592253161 (rodzice) i 34592394250 (uczeń) przeszły krok Verify fresh published report; rodzice pominęli logowanie do Librusa, ponieważ aktualne okno miało już zdrowy raport. Testy produkcyjne wyzwolono przez workflow_dispatch z scheduled=true. Punktualność pierwszego rzeczywistego porannego uruchomienia Netlify nie była jeszcze obserwowana.
 
 ## Budowanie i testy
 
