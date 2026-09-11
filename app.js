@@ -125,10 +125,21 @@ function moreSections(){
 
 function missedCollection(){
  const parts=d=>Object.fromEntries(new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(d).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
- const now=parts(new Date()),read=parts(new Date(data.collected_at)),today=now.year+"-"+now.month+"-"+now.day,readAt=read.year+"-"+read.month+"-"+read.day+"T"+read.hour+":"+read.minute;
- const hour=+now.hour;
- const target=hour>=19?"18:00":hour>=8?"07:00":null;
- return target?readAt<today+"T"+target:Date.now()-new Date(data.collected_at).getTime()>15*3600000;
+ const now=parts(new Date()),today=now.year+"-"+now.month+"-"+now.day,minute=+now.hour*60+(+now.minute);
+ // Allow the bounded retries to finish before showing a missed-window warning.
+ const target=minute>=1110?"18:00":minute>=420?"06:30":null;
+ return Object.values(data.accounts).some(a=>{
+  const timestamp=new Date(a.checked_at||data.collected_at);
+  if(!Number.isFinite(timestamp.getTime()))return true;
+  const read=parts(timestamp),readAt=read.year+"-"+read.month+"-"+read.day+"T"+read.hour+":"+read.minute;
+  return target?readAt<today+"T"+target:Date.now()-timestamp.getTime()>15*3600000;
+ });
+}
+function renderHealth(){
+ $("health").replaceChildren();
+ const bad=Object.values(data.accounts).filter(a=>a.status!=="ok");
+ if(bad.length){const n=el("div","notice");n.append(el("p","","Nie udało się odświeżyć konta: "+bad.map(a=>a.name).join(", ")+". Poniżej ostatni poprawny odczyt."));$("health").append(n)}
+ if(missedCollection()){$("health").append(el("div","notice","Brakuje aktualnego raportu z ostatniej pory odczytu. Wyświetlane dane są starsze."))}
 }
 function render(){
  if(!data)return;
@@ -139,10 +150,7 @@ function render(){
  (accounts.length>1?[["all","Oboje"],...accounts.map(a=>[a.child,a.name])]:accounts.map(a=>[a.child,a.name])).forEach(([id,label])=>{const b=button(label,()=>{selected=id;query="";render()});b.setAttribute("aria-pressed",String(selected===id));$("children").append(b)});
  $("children").hidden=accounts.length===1;
  $("updated").textContent="Odczyt: "+datePL(data.collected_at,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
- $("health").replaceChildren();
- const bad=Object.values(data.accounts).filter(a=>a.status!=="ok");
- if(bad.length){const n=el("div","notice");n.append(el("p","","Nie udało się odświeżyć konta: "+bad.map(a=>a.name).join(", ")+". Poniżej ostatni poprawny odczyt."));$("health").append(n)}
- if(missedCollection()){$("health").append(el("div","notice","Raport nie obejmuje ostatniej pory odczytu. Sprawdź nowszą wersję."))}
+ renderHealth();
  $("nav").replaceChildren();
  const navNames={overview:"Sprawy",messages:"Poczta",timetable:"Plan",grades:"Oceny"};
  sections.forEach(([id,label])=>{

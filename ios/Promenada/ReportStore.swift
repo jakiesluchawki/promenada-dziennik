@@ -116,10 +116,19 @@ enum AccessKey {
 
 actor ReportStore {
     private var revision = 0
+    #if DEBUG
+    private var fixtureLoads = 0
+    #endif
     static let endpoint = URL(string: "https://jakiesluchawki.github.io/promenada-dziennik/report.enc.json")!
     private func cachedURL(_ access: JournalAccess) -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(access.role == "parent" ? "last-report.enc.json" : "student-" + access.principal + ".enc.json")
+    }
+    func cached(access: JournalAccess) throws -> String? {
+        guard let bytes = try? Data(contentsOf: cachedURL(access)) else { return nil }
+        let text = try ReportCipher.decrypt(bytes, password: access.password)
+        try access.validate(text)
+        return text
     }
     func load(access: JournalAccess) async throws -> (text: String, offline: Bool) {
         let startedAtRevision = revision
@@ -130,8 +139,10 @@ actor ReportStore {
         do {
             #if DEBUG
             if let fixture = ProcessInfo.processInfo.environment["PROMENADA_TEST_REPORT"] {
+                fixtureLoads += 1
                 if ProcessInfo.processInfo.environment["PROMENADA_TEST_OFFLINE"] == "1" { throw JournalError.network }
-                guard let bytes = Data(base64Encoded: fixture) else { throw JournalError.format }
+                let selected = fixtureLoads > 1 ? ProcessInfo.processInfo.environment["PROMENADA_TEST_NEXT_REPORT"] ?? fixture : fixture
+                guard let bytes = Data(base64Encoded: selected) else { throw JournalError.format }
                 encrypted = bytes
             } else {
             var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!

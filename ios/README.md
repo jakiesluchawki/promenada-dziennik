@@ -1,6 +1,6 @@
 # Mahbrus iOS
 
-Prywatny rodzinny dziennik dla iPhone'a i iPada. Aktualne wydanie TestFlight **1.0.0 (2)**, iOS 18+.
+Prywatny rodzinny dziennik dla iPhone'a i iPada. Przygotowywana aktualizacja TestFlight **1.0.0 (3)**, iOS 18+.
 Nazwa aplikacji i schematu: **Mahbrus**. Bundle ID: **pl.mahboob.mahbrus**.
 Promenada.xcodeproj to wewnętrzna nazwa projektu, zachowana po zmianie marki.
 
@@ -12,7 +12,13 @@ Hasło dziennika jest wpisywane raz. Po poprawnym odblokowaniu trafia do systemo
 
 Ostatni zaszyfrowany raport jest dostępny offline z widocznym komunikatem o braku połączenia. Plik ma pełną ochronę iOS i jest wyłączony z kopii zapasowej. „Wyloguj” usuwa zapamiętany dostęp, raport oraz lokalne oznaczenia.
 
-Interfejs zawiera sprawy, pocztę, ogłoszenia, plan lekcji, terminy, oceny, frekwencję, uwagi, zadania domowe i osiągnięcia. Załączniki otwierają systemowy panel udostępniania. Linki do Librusa otwierają się poza aplikacją. Oznaczenia „przeczytane” i „zrobione” są na razie lokalne dla urządzenia.
+Interfejs zawiera sprawy, pocztę, ogłoszenia, plan lekcji, terminy, oceny, frekwencję, uwagi, zadania domowe i osiągnięcia. Załączniki otwierają systemowy panel udostępniania. Linki do Librusa otwierają się poza aplikacją. Oznaczenia „przeczytane” i „zrobione” pozostają lokalne dla urządzenia zgodnie z decyzją rodziny.
+
+## Automatyczne wczytywanie (build 3)
+
+Przy zapamiętanym dostępie aplikacja pokazuje zweryfikowany lokalny szyfrogram od razu i pobiera aktualną publikację w tle. Powrót na pierwszy plan sprawdza gotowy plik (najczęściej raz na 30 sekund, bez powielania trwających operacji). Nie wysyła POST do kolektora. Nie resetuje lokalnych oznaczeń; niezmieniony raport nie przebudowuje otwartego widoku. Zmiana dnia odświeża jednak informację o świeżości. Offline pozostaje ostatni raport z komunikatem. Nowe dane nadal przechodzą walidację granicy rodzic/uczeń przed zapisem i wyświetleniem.
+
+Nowy harmonogram serwerowy: rodzice 06:30/18:00, uczeń 06:32/18:02 czasu Warszawy, z kontrolą i ograniczonymi ponowieniami po 10 i 20 minutach. Szczegóły i ograniczenia: server/README.md. Starsze wpisy poniżej dokumentują stan poprzednich wydań.
 
 ## Budowanie i testy
 

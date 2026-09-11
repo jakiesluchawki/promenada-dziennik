@@ -55,7 +55,7 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
         switch action {
         case "ready":
             guard !ready else { return }; ready = true
-            if let saved = AccessKey.read() { unlock(JournalAccess.restore(saved)) } else { busy = false }
+            if let saved = AccessKey.read() { unlock(JournalAccess.restore(saved), automatic: true) } else { busy = false }
         case "refresh": requestRefresh()
         case "published": if let access { unlock(access, refreshing: true) }
         case "forget": confirmForget = true
@@ -82,12 +82,19 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
         default: break
         }
     }
-    func unlock(_ credentials: JournalAccess, refreshing: Bool = false) {
+    func unlock(_ credentials: JournalAccess, refreshing: Bool = false, automatic: Bool = false) {
         guard ready, !credentials.password.isEmpty, !busy || !open else { return }
         busy = true; error = ""
         let requestGeneration = generation
         Task {
             do {
+                // Show the last validated encrypted snapshot immediately on a remembered login.
+                if automatic, !open, let cached = try? await store.cached(access: credentials) {
+                    guard generation == requestGeneration else { return }
+                    access = credentials
+                    try await present(cached, status: "Sprawdzam dostępność nowszego raportu…", automatic: false)
+                    open = true
+                }
                 let result = try await store.load(access: credentials)
                 guard generation == requestGeneration else { return }
                 try AccessKey.save(credentials.encoded)
@@ -95,12 +102,8 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
                 if let bytes = result.text.data(using: .utf8), let report = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any], let config = report["refresh"], let json = try? JSONSerialization.data(withJSONObject: config) {
                     refreshConfig = try? JSONDecoder().decode(RefreshConfiguration.self, from: json)
                 } else { refreshConfig = nil }
-                let review = UserDefaults.standard.string(forKey: reviewKey) ?? "{\"read\":{},\"done\":{},\"priority\":{}}"
                 let message = result.offline ? "Bez połączenia z serwerem. Pokazuję ostatni zapisany raport." : ""
-                _ = try await web?.callAsyncJavaScript(
-                    "window.promenadaReceive(JSON.parse(report), status, JSON.parse(review));",
-                    arguments: ["report": result.text, "status": message, "review": review],
-                    in: nil, contentWorld: .page)
+                try await present(result.text, status: message, automatic: automatic)
                 open = true; lastCheck = Date()
             } catch {
                 guard generation == requestGeneration else { return }
@@ -110,7 +113,23 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
             if generation == requestGeneration { busy = false; sendBusy(false) }
         }
     }
-    func foreground() {} // No collector dispatch on launch or foreground.
+    private func present(_ text: String, status: String, automatic: Bool) async throws {
+        let review = UserDefaults.standard.string(forKey: reviewKey) ?? "{\"read\":{},\"done\":{},\"priority\":{}}"
+        _ = try await web?.callAsyncJavaScript(
+            "window.promenadaReceive(JSON.parse(report), status, JSON.parse(review), automatic);",
+            arguments: ["report": text, "status": status, "review": review, "automatic": automatic],
+            in: nil, contentWorld: .page)
+    }
+    func foreground() {
+        // Downloads only the already published file. Never dispatches a Librus collection.
+        var interval: TimeInterval = 30
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["PROMENADA_TEST_NEXT_REPORT"] != nil { interval = 0 }
+        #endif
+        guard ready, open, !busy, attachment == nil, let access,
+              Date().timeIntervalSince(lastCheck) >= interval else { return }
+        unlock(access, refreshing: true, automatic: true)
+    }
     private func requestRefresh() {
         guard !busy, let access else { return }
         guard let refreshConfig else {

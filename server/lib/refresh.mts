@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { VERIFIED_STEP } from './watchdog.mts';
 export type Settings = { githubToken?: string; parentHash?: string; studentHash?: string };
 type Run = { id: number; status: string; conclusion: string | null; created_at: string; path: string; head_branch: string };
 function reply(state: string, message: string, status = 200, run: string | null = null) {
@@ -36,7 +37,13 @@ export async function handle(req: Request, env: Settings, fetcher: typeof fetch 
       const run = query.startsWith('after:') ? runs.find(r => r.id > Number(query.slice(6))) : runs.find(r => String(r.id) === query);
       if (!run) return reply('queued', 'Oczekiwanie na uruchomienie odczytu…', 200, query);
       if (run.status !== 'completed') return reply('running', 'Pobieranie i publikowanie raportu…', 200, String(run.id));
-      return run.conclusion === 'success' ? reply('complete', 'Raport jest gotowy.', 200, String(run.id)) : reply('failed', 'Odczyt nie zakończył się poprawnie. Poprzedni raport pozostaje dostępny.', 200, String(run.id));
+      if (run.conclusion === 'success') {
+        const result = await github(`/runs/${run.id}/jobs?per_page=100`);
+        const verified = result.jobs.some((job: { steps?: { name: string; conclusion: string }[] }) => job.steps?.some(step => step.name === VERIFIED_STEP && step.conclusion === 'success'));
+        if (verified) return reply('complete', 'Raport jest gotowy.', 200, String(run.id));
+        return reply('cooldown', 'Ta próba nie wykonała nowego odczytu. Wczytuję ostatni dostępny raport.', 200, String(run.id));
+      }
+      return reply('failed', 'Odczyt nie zakończył się poprawnie. Poprzedni raport pozostaje dostępny.', 200, String(run.id));
     }
     const active = runs.find(r => r.status !== 'completed');
     if (active) return reply('running', 'Odczyt już trwa…', 200, String(active.id));

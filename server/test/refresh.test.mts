@@ -11,7 +11,7 @@ function fake(runs: object[] = [], failure = false) {
   const fetcher = (async (url, options) => {
     calls.push({ url: String(url), options });
     if (failure) return new Response('', { status: 403 });
-    return options?.method === 'POST' ? new Response(null, { status: 204 }) : Response.json({ workflow_runs: runs });
+    return options?.method === 'POST' ? new Response(null, { status: 204 }) : String(url).includes('/jobs?') ? Response.json({ jobs: [{ steps: [{ name: 'Verify fresh published report', conclusion: 'success' }] }] }) : Response.json({ workflow_runs: runs });
   }) as typeof fetch;
   return { calls, fetcher };
 }
@@ -40,5 +40,9 @@ test('failure does not become a false success or disclose GitHub errors', async 
 test('polling stays scoped and never dispatches', async () => {
   const f = fake([{ id: 25, status: 'completed', conclusion: 'success', created_at: new Date().toISOString(), head_branch: 'main', path: '.github/workflows/update-student.yml' }]);
   assert.equal((await (await handle(request(student, 'GET', '?run=after:20'), env, f.fetcher)).json()).state, 'complete');
-  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls.length, 2);
+});
+test('skipped collection cannot claim a freshly published report', async () => {
+  const fetcher = (async (url) => Response.json(String(url).includes('/jobs?') ? { jobs: [{ steps: [{ name: 'Verify fresh published report', conclusion: 'skipped' }] }] } : { workflow_runs: [{ id: 25, status: 'completed', conclusion: 'success', created_at: new Date().toISOString(), head_branch: 'main', path: '.github/workflows/update-student.yml' }] })) as typeof fetch;
+  assert.equal((await (await handle(request(student, 'GET', '?run=25'), env, fetcher)).json()).state, 'cooldown');
 });

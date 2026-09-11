@@ -35,7 +35,7 @@ def main():
         checked = datetime.fromisoformat(previous['collected_at'].replace('Z', '+00:00'))
         if (datetime.now(timezone.utc) - checked).total_seconds() < 300:
             output('due', 'false'); print('Recent student report retained; cooldown active.'); return
-        if os.environ.get('GITHUB_EVENT_NAME') == 'schedule' and not needs_collection(previous, datetime.now(timezone.utc)):
+        if (os.environ.get('GITHUB_EVENT_NAME') == 'schedule' or os.environ.get('MAHBRUS_SCHEDULED') == 'true') and not needs_collection(previous, datetime.now(timezone.utc)):
             output('due', 'false'); print('Student collection window already covered.'); return
     output('due', 'true')
     original_secret = collector.secret

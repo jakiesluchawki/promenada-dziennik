@@ -5,8 +5,13 @@ attachment = f => {
  if(!f.base64)return empty("Załącznik niedostępny: "+f.name);
  return button("Otwórz · "+f.name+" ("+Math.ceil(f.size/1024)+" KB)",()=>nativeSend("attachment",{name:f.name||"zalacznik",base64:f.base64}),"attachment");
 };
-window.promenadaReceive=(report,status,saved)=>{
+window.promenadaReceive=(report,status,saved,automatic=false)=>{
  const before=data?.collected_at;
+ if(automatic&&before===report.collected_at){
+  renderHealth();
+  $("sync-status").textContent=status||"";
+  return;
+ }
  data=report;
  if(saved)reviewState=saved;
  $("gate").hidden=true;$("journal").hidden=false;$("lock").hidden=false;
