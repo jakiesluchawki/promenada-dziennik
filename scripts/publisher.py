@@ -11,6 +11,8 @@ from cryptography.hazmat.primitives import hashes
 SITE=pathlib.Path(os.environ.get("PROMENADA_SITE_DIR",str(BASE.parents[1]/"outputs"/"promenada")))
 AAD=b"promenada-report-v1"
 ITERATIONS=600000
+# Existing iOS clients reject larger encrypted envelopes.
+MAX_REPORT_BYTES=25_000_000
 os.umask(0o077)
 def canonical(d):return json.dumps(d,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
 def key_for(password,salt):
@@ -111,7 +113,9 @@ def build(publish=False, on_phase=lambda phase: None):
     on_phase("verify_encryption")
     assert decrypt(envelope,password)==report
     on_phase("write_ciphertext")
-    path=SITE/"report.enc.json";tmp=SITE/"report.enc.tmp";tmp.write_text(json.dumps(envelope,separators=(",",":")));tmp.replace(path)
+    payload=json.dumps(envelope,separators=(",",":"))
+    if len(payload.encode())>MAX_REPORT_BYTES:raise ReportError("report_too_large")
+    path=SITE/"report.enc.json";tmp=SITE/"report.enc.tmp";tmp.write_text(payload);tmp.replace(path)
     on_phase("audit_public_files")
     audit()
     on_phase("prepare_state")
