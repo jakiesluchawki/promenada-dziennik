@@ -1,39 +1,68 @@
 #!/usr/bin/env python3
 """Cloud task: decrypt previous snapshot, collect both accounts, publish only ciphertext."""
-import os,sys,json,pathlib,shutil,contextlib,io
-BASE=pathlib.Path(__file__).resolve().parent
-ROOT=BASE.parent
-os.environ["PROMENADA_SITE_DIR"]=str(ROOT)
-sys.path.insert(0,str(BASE))
-import collector,publisher
-WORK=pathlib.Path(os.environ.get("RUNNER_TEMP",str(ROOT.parent.parent/"work")))/"promenada-private"
-WORK.mkdir(parents=True,exist_ok=True,mode=0o700)
-collector.BASE=publisher.BASE=WORK
-def main():
-    password=collector.secret("site-password")
-    envelope=json.loads((ROOT/"report.enc.json").read_text())
-    previous=publisher.decrypt(envelope,password)
-    old_digest=previous.pop("digest",{"actions":[],"observations":[]})
-    # Observations are regenerated from attendance and must not accumulate.
-    old_digest["observations"]=[]
-    (WORK/"snapshot.json").write_text(json.dumps(previous,ensure_ascii=False))
-    (WORK/"digest.json").write_text(json.dumps(old_digest,ensure_ascii=False))
-    failed=False
-    with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+import os, sys, json, pathlib, contextlib, io, tempfile
+
+BASE = pathlib.Path(__file__).resolve().parent
+ROOT = BASE.parent
+os.environ["PROMENADA_SITE_DIR"] = str(ROOT)
+sys.path.insert(0, str(BASE))
+import collector, publisher
+from report_errors import Diagnostics
+
+
+def main(on_phase=lambda phase: None):
+    on_phase("prepare_workspace")
+    # Context-managed, mode-0700 directory is removed on success and failure.
+    with tempfile.TemporaryDirectory(prefix="promenada-private-", dir=os.environ.get("RUNNER_TEMP")) as temporary:
+        work = pathlib.Path(temporary)
+        old_bases = collector.BASE, publisher.BASE
+        collector.BASE = publisher.BASE = work
         try:
-            if "--dry-run" not in sys.argv:collector.main()
-        except SystemExit:failed=True
-        publisher.build()
-    state=json.loads((WORK/"snapshot.json").read_text())
-    failed=failed or any(a.get("status")!="ok" for a in state["accounts"].values())
-    from stage_site import stage
-    stage(ROOT)
-    with open(os.environ.get("GITHUB_OUTPUT",str(BASE/"out.txt")),"a") as f:f.write("healthy="+("false" if failed else "true")+"\n")
-    for p in ["snapshot.json","digest.json","published-state.json","snapshot.tmp","report.enc.tmp"]:
-        (WORK/p).unlink(missing_ok=True)
-    print("Encrypted report prepared. "+("Some accounts require attention; last good data preserved." if failed else "All accounts refreshed."))
-if __name__=="__main__":
-    try:main()
-    except Exception:
-        print("Report update failed before publication. Existing report was preserved.",file=sys.stderr)
-        sys.exit(1)
+            on_phase("decrypt_previous")
+            password = collector.secret("site-password")
+            envelope = json.loads((ROOT / "report.enc.json").read_text())
+            previous = publisher.decrypt(envelope, password)
+            on_phase("prepare_snapshot")
+            old_digest = previous.pop("digest", {"actions": [], "observations": []})
+            # Observations are regenerated from attendance and must not accumulate.
+            old_digest["observations"] = []
+            (work / "snapshot.json").write_text(json.dumps(previous, ensure_ascii=False))
+            (work / "digest.json").write_text(json.dumps(old_digest, ensure_ascii=False))
+            failed = False
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                on_phase("collect")
+                try:
+                    if "--dry-run" not in sys.argv:
+                        collector.main()
+                except SystemExit:
+                    failed = True
+                publisher.build(on_phase=on_phase)
+            on_phase("check_collection")
+            state = json.loads((work / "snapshot.json").read_text())
+            failed = failed or any(a.get("status") != "ok" for a in state["accounts"].values())
+            on_phase("stage_site")
+            from stage_site import stage
+            stage(ROOT)
+            on_phase("write_health")
+            with open(os.environ.get("GITHUB_OUTPUT", str(BASE / "out.txt")), "a") as output:
+                output.write("healthy=" + ("false" if failed else "true") + "\n")
+            on_phase("cleanup")
+        finally:
+            collector.BASE, publisher.BASE = old_bases
+    print("Encrypted report prepared. " + ("Some accounts require attention; last good data preserved." if failed else "All accounts refreshed."))
+
+
+def run():
+    diagnostics = Diagnostics()
+    try:
+        main(on_phase=diagnostics.set_phase)
+    except Exception as error:
+        # Only allowlisted labels may enter public Actions logs. Never print the
+        # exception, its traceback, paths, source IDs, credentials or report data.
+        print("Report update failed before publication. Previously published report was preserved. " + diagnostics.failure(error), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(run())
