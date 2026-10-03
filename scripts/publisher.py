@@ -4,6 +4,7 @@ import sys,os,json,pathlib,hashlib,base64,secrets,subprocess,datetime,copy
 BASE=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(BASE))
 from collector import secret
+from report_errors import ReportError
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -27,7 +28,7 @@ def load_report():
     digest=json.loads((BASE/"digest.json").read_text()) if (BASE/"digest.json").exists() else {"actions":[],"observations":[]}
     ids={m["id"] for a in d["accounts"].values() for k in ["messages","announcements"] for m in a.get(k,[])}
     for a in digest.get("actions",[]):
-        if a.get("source_id") and a["source_id"] not in ids:raise RuntimeError("Digest references an unknown source: "+a["source_id"])
+        if a.get("source_id") and a["source_id"] not in ids:raise ReportError("digest_unknown_source")
     d["digest"]=digest
     if os.environ.get("PARENT_REFRESH_CONFIG"):
         d["refresh"]=json.loads(os.environ["PARENT_REFRESH_CONFIG"])
@@ -76,11 +77,11 @@ def audit():
     except (RuntimeError, OSError): pass
     allowed={".git",".gitignore",".nojekyll","index.html","styles.css","app.js","favicon.svg","report.enc.json","ARTWORK.md","README.md","assets","fonts","scripts",".github","requirements.txt","_site","kompakt","ios","students","server","PRODUCT.md","DESIGN.md","tests"}
     for p in SITE.iterdir():
-        if p.name not in allowed:raise RuntimeError("Unreviewed file in publishing folder: "+p.name)
+        if p.name not in allowed:raise ReportError("unreviewed_public_file")
     for p in SITE.rglob("*"):
         if p.is_file() and not any(part in p.parts for part in [".git","__pycache__","node_modules",".netlify","_site","build"]) and p.suffix not in [".png",".jpg",".webp",".woff2"]:
             txt=p.read_text(errors="ignore")
-            if any(n and n in txt for n in needles):raise RuntimeError("Plaintext private data found in "+p.name)
+            if any(n and n in txt for n in needles):raise ReportError("plaintext_public_file")
     return True
 def verify():
     password=secret("site-password");report=load_report();envelope=encrypt(report,password)
@@ -102,11 +103,18 @@ def verify():
     print(json.dumps({"encryption_roundtrip":True,"wrong_password_rejected":True,"tamper_rejected":True,"accounts_verified":len(report["accounts"])}))
 def run_git(*args):
     return subprocess.run(["git","-C",str(SITE),*args],check=True,capture_output=True,text=True).stdout.strip()
-def build(publish=False):
-    report=load_report();password=secret("site-password");envelope=encrypt(report,password)
+def build(publish=False, on_phase=lambda phase: None):
+    on_phase("load_report")
+    report=load_report();password=secret("site-password")
+    on_phase("encrypt_report")
+    envelope=encrypt(report,password)
+    on_phase("verify_encryption")
     assert decrypt(envelope,password)==report
+    on_phase("write_ciphertext")
     path=SITE/"report.enc.json";tmp=SITE/"report.enc.tmp";tmp.write_text(json.dumps(envelope,separators=(",",":")));tmp.replace(path)
+    on_phase("audit_public_files")
     audit()
+    on_phase("prepare_state")
     fp=fingerprint(report);state_path=BASE/"published-state.json";old=json.loads(state_path.read_text()) if state_path.exists() else {}
     state={"fingerprint":fp,"collected_at":report["collected_at"],"meaningful_change":old.get("fingerprint")!=fp}
     state_path.write_text(json.dumps(state,indent=2)) if not publish else None
