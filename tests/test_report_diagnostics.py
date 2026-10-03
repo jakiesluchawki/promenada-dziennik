@@ -27,7 +27,7 @@ def previous_report():
         'accounts': {'demo': {
             'status': 'ok', 'checked_at': '2026-10-02T16:00:00+00:00',
             'messages': [], 'announcements': [{
-                'id': SOURCE, 'title': MARKER, 'text': MARKER,
+                'id': SOURCE, 'child': 'demo', 'kind': 'announcement', 'title': MARKER, 'text': MARKER,
                 'attachments': [],
             }], 'sections': {},
         }},
@@ -128,11 +128,26 @@ class CloudRunDiagnostics(unittest.TestCase):
         self.assertEqual((collector.BASE, publisher.BASE), self.old_bases)
         return result, logs
 
-    def test_vanished_referenced_announcement_reports_safe_code_and_keeps_ciphertext(self):
+    def test_vanished_referenced_announcement_is_preserved_as_historical_source(self):
         result, logs = self.run_cloud(lambda: self.collect(remove_source=True))
+        self.assertEqual(result, 0)
+        report = publisher.decrypt(json.loads(self.target.read_text()), PASSWORD)
+        source = report['accounts']['demo']['announcements'][0]
+        self.assertEqual(source['id'], SOURCE)
+        self.assertEqual(source['title'], 'Archiwum · ' + MARKER)
+        self.assertEqual(source['text'], MARKER)
+        self.assertTrue(source['archived'])
+        self.assertEqual(self.output.read_text(), 'healthy=true\n')
+
+    def test_unverifiable_source_is_still_rejected_without_changing_ciphertext(self):
+        previous = previous_report()
+        previous['accounts']['demo']['announcements'] = []
+        self.target.write_text(json.dumps(publisher.encrypt(previous, PASSWORD)))
+        original = self.target.read_text()
+        result, logs = self.run_cloud(self.collect)
         self.assertEqual(result, 1)
-        self.assertIn('phase=load_report code=digest_unknown_source', logs)
-        self.assertEqual(self.target.read_text(), self.original)
+        self.assertIn('phase=reconcile_sources code=digest_unknown_source', logs)
+        self.assertEqual(self.target.read_text(), original)
         self.assertFalse(self.output.exists())
         self.stage.assert_not_called()
 
@@ -176,6 +191,15 @@ class CloudRunDiagnostics(unittest.TestCase):
             result, logs = self.run_cloud(self.collect)
         self.assertEqual(result, 1)
         self.assertIn('phase=audit_public_files code=plaintext_public_file', logs)
+        self.assertFalse(self.output.exists())
+        self.stage.assert_not_called()
+
+    def test_oversized_envelope_is_rejected_before_replacing_ciphertext(self):
+        with patch.object(publisher, 'MAX_REPORT_BYTES', 1):
+            result, logs = self.run_cloud(self.collect)
+        self.assertEqual(result, 1)
+        self.assertIn('phase=write_ciphertext code=report_too_large', logs)
+        self.assertEqual(self.target.read_text(), self.original)
         self.assertFalse(self.output.exists())
         self.stage.assert_not_called()
 

@@ -8,6 +8,7 @@ os.environ["PROMENADA_SITE_DIR"] = str(ROOT)
 sys.path.insert(0, str(BASE))
 import collector, publisher
 from report_errors import Diagnostics
+from report_sources import reconcile_sources
 
 
 def main(on_phase=lambda phase: None):
@@ -36,6 +37,12 @@ def main(on_phase=lambda phase: None):
                         collector.main()
                 except SystemExit:
                     failed = True
+                on_phase("reconcile_sources")
+                snapshot = json.loads((work / "snapshot.json").read_text())
+                snapshot = reconcile_sources(previous, snapshot, old_digest)
+                temporary_snapshot = work / "snapshot.tmp"
+                temporary_snapshot.write_text(json.dumps(snapshot, ensure_ascii=False))
+                temporary_snapshot.replace(work / "snapshot.json")
                 publisher.build(on_phase=on_phase)
             on_phase("check_collection")
             state = json.loads((work / "snapshot.json").read_text())

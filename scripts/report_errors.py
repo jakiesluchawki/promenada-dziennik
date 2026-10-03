@@ -3,11 +3,11 @@ import json
 from cryptography.exceptions import InvalidTag
 
 ERROR_CODES = frozenset({
-    "digest_unknown_source", "unreviewed_public_file", "plaintext_public_file",
+    "digest_unknown_source", "digest_source_scope", "unreviewed_public_file", "plaintext_public_file", "report_too_large",
 })
 PHASES = frozenset({
     "initialise", "prepare_workspace", "decrypt_previous", "prepare_snapshot",
-    "collect", "load_report", "encrypt_report", "verify_encryption", "write_ciphertext", "audit_public_files",
+    "collect", "reconcile_sources", "load_report", "encrypt_report", "verify_encryption", "write_ciphertext", "audit_public_files",
     "prepare_state", "check_collection", "stage_site", "write_health", "cleanup",
 })
 
