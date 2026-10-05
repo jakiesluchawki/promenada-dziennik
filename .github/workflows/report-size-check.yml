@@ -1,0 +1,37 @@
+name: Report size candidate checks
+on:
+  push:
+    branches: [fix/report-size-2026-10-05, fix/report-attachments-v2]
+permissions:
+  contents: read
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check -q -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q scripts tests
+      - run: node --check app.js && node --check ios/Promenada/Web/app.js
+  native-helpers-and-build:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Run synthetic native crypto and bridge vectors
+        run: sh ios/tests/run-attachment-contract-tests.sh
+      - name: Build unsigned iOS simulator app
+        run: >-
+          xcodebuild -project ios/Promenada.xcodeproj -scheme Mahbrus
+          -configuration Debug -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/mahbrus-v2-build"
+          CODE_SIGNING_ALLOWED=NO build

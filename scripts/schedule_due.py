@@ -25,8 +25,8 @@ def needs_collection(report, now):
     return False
 
 def main():
-    report_path = pathlib.Path(__file__).resolve().parent.parent / "report.enc.json"
-    report = publisher.decrypt(json.loads(report_path.read_text()), collector.secret("site-password"))
+    root = pathlib.Path(__file__).resolve().parent.parent
+    report = publisher.load_current_report(root, collector.secret("site-password"), audience="parent", principal="parent")
     now = datetime.now(ZONE)
     checked = datetime.fromisoformat(report["collected_at"].replace("Z", "+00:00"))
     due = (now - checked).total_seconds() >= 300
@@ -35,4 +35,9 @@ def main():
     with open(os.environ["GITHUB_OUTPUT"], "a") as out: out.write("due="+str(due).lower()+"\n")
     print("Collection is due." if due else "This collection window already has a healthy report; no Librus login needed.")
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    try: main()
+    except Exception:
+        import sys
+        print("Collection window could not be checked safely.", file=sys.stderr)
+        sys.exit(1)

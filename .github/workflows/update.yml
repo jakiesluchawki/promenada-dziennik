@@ -53,12 +53,12 @@ jobs:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
           PARENT_REFRESH_CONFIG: ${{ secrets.PARENT_REFRESH_CONFIG }}
         run: python scripts/cloud_run.py
-      - name: Save only the encrypted snapshot
+      - name: Save validated encrypted reports and attachment blobs
         if: steps.due.outputs.due == 'true'
         run: |
           git config user.name "Promenada"
           git config user.email "promenada@users.noreply.github.com"
-          git add report.enc.json
+          python scripts/stage_site.py --git-add
           git commit -m "Refresh encrypted report"
           git push origin main
       - name: Stage the current encrypted reports

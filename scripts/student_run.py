@@ -4,6 +4,7 @@ import contextlib, hashlib, io, json, os, pathlib, sys, tempfile
 from datetime import datetime, timezone
 import collector, publisher
 from schedule_due import needs_collection
+import report_attachments
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 def principal_id(login):
@@ -17,6 +18,8 @@ def validate_report(report, principal, key):
     for kind in ('actions', 'observations'):
         if any(item.get('child') != key for item in report.get('digest', {}).get(kind, [])):
             raise ValueError('Foreign digest entry')
+    try: report_attachments.validate_scope(report, 'student', principal, key)
+    except publisher.ReportError: raise ValueError('Student report scope mismatch') from None
 
 def main():
     accounts_raw = collector.secret('student-accounts')
@@ -25,11 +28,11 @@ def main():
     key, info = next(iter(accounts.items()))
     if info.get('role') != 'student': raise ValueError('Student credentials required')
     principal = principal_id(info['login'])
-    target = ROOT / 'students' / (principal + '.enc.json')
+    target = publisher.current_report_path(ROOT, 'student', principal)
     password = info['password']
     previous = None
-    if target.exists():
-        previous = publisher.decrypt(json.loads(target.read_text()), password)
+    if target.exists() or target.is_symlink():
+        previous = publisher.load_current_report(ROOT, password, 'student', principal, key)
         validate_report(previous, principal, key)
     if '--dry-run' not in sys.argv and previous:
         checked = datetime.fromisoformat(previous['collected_at'].replace('Z', '+00:00'))
@@ -44,11 +47,13 @@ def main():
         if name == 'site-password': return password
         return original_secret(name)
     collector.secret = publisher.secret = scoped_secret
+    old_bases = collector.BASE, publisher.BASE
     try:
         with tempfile.TemporaryDirectory(prefix='mahbrus-student-', dir=os.environ.get('RUNNER_TEMP')) as temporary:
             collector.BASE = publisher.BASE = pathlib.Path(temporary)
             if previous:
                 # This snapshot is explicitly student-only; no parent fallback or parent digest.
+                previous = report_attachments.hydrate(previous, ROOT)
                 (collector.BASE/'snapshot.json').write_text(json.dumps(previous, ensure_ascii=False))
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 if '--dry-run' not in sys.argv:
@@ -64,15 +69,11 @@ def main():
             if refresh: report['refresh'] = json.loads(refresh)
             elif previous and previous.get('refresh'): report['refresh'] = previous['refresh']
             validate_report(report, principal, key)
-            envelope = publisher.encrypt(report, password)
-            validate_report(publisher.decrypt(envelope, password), principal, key)
-            target.parent.mkdir(exist_ok=True)
-            temporary_path = target.with_suffix('.tmp')
-            temporary_path.write_text(json.dumps(envelope, separators=(',', ':')))
-            temporary_path.replace(target)
-            print(json.dumps({'student_report': True, 'messages': len(report['accounts'][key].get('messages', [])), 'sections': list(report['accounts'][key].get('sections', {}))}))
+            result = publisher.write_reports(report, password, ROOT)
+            print(json.dumps({'student_report': True, 'legacy_updated': result['legacy_updated'], 'messages': len(report['accounts'][key].get('messages', [])), 'sections': list(report['accounts'][key].get('sections', {}))}))
     finally:
         collector.secret = publisher.secret = original_secret
+        collector.BASE, publisher.BASE = old_bases
     from stage_site import stage
     stage(ROOT)
     output('healthy', 'true')

@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 import CommonCrypto
 import Security
+import CoreFoundation
 
 enum JournalError: LocalizedError {
     case format, password, network, keychain
@@ -15,12 +16,26 @@ enum JournalError: LocalizedError {
     }
 }
 
+// Foundation bridges JSON booleans through NSNumber; they are never schema integers.
+enum ReportJSON {
+    static func integer(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite, number.doubleValue.rounded() == number.doubleValue,
+              number.doubleValue >= 0, number.doubleValue <= Double(Int32.max) else { return nil }
+        return number.intValue
+    }
+}
+
 struct ReportCipher {
     struct Envelope: Decodable {
         let v: Int, iterations: Int
         let salt: String, iv: String, ciphertext: String
     }
-    static func decrypt(_ encrypted: Data, password: String) throws -> String {
+    static func acceptsSchema(_ value: Any?, requiresSchema2: Bool = false) -> Bool {
+        guard let schema = ReportJSON.integer(value), [1, 2].contains(schema) else { return false }
+        return !requiresSchema2 || schema == 2
+    }
+    static func decrypt(_ encrypted: Data, password: String, requiresSchema2: Bool = false) throws -> String {
         guard encrypted.count <= 25_000_000,
               let envelope = try? JSONDecoder().decode(Envelope.self, from: encrypted),
               envelope.v == 1, envelope.iterations == 600000,
@@ -47,13 +62,14 @@ struct ReportCipher {
                                     authenticating: Data("promenada-report-v1".utf8)) }
         catch { throw JournalError.password }
         guard let object = try? JSONSerialization.jsonObject(with: plain) as? [String: Any],
-              object["schema"] as? Int == 1, object["accounts"] is [String: Any],
+              acceptsSchema(object["schema"], requiresSchema2: requiresSchema2),
+              object["accounts"] is [String: Any],
               let text = String(data: plain, encoding: .utf8) else { throw JournalError.format }
         return text
     }
 }
 
-struct JournalAccess: Codable, Sendable {
+struct JournalAccess: Codable, Sendable, Equatable {
     let role: String
     let login: String
     let password: String
@@ -64,17 +80,42 @@ struct JournalAccess: Codable, Sendable {
         let path = role == "student" ? "students/\(principal).enc.json" : "report.enc.json"
         return URL(string: "https://jakiesluchawki.github.io/promenada-dziennik/" + path)!
     }
+    var v2Endpoint: URL {
+        let path = role == "student" ? "students/\(principal).v2.enc.json" : "report.v2.enc.json"
+        return ReportStore.siteRoot.appendingPathComponent(path)
+    }
     func validate(_ text: String) throws {
         guard let bytes = text.data(using: .utf8),
               let report = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-              let accounts = report["accounts"] as? [String: [String: Any]] else { throw JournalError.format }
+              let schema = ReportJSON.integer(report["schema"]), [1, 2].contains(schema),
+              let accounts = report["accounts"] as? [String: [String: Any]], !accounts.isEmpty else { throw JournalError.format }
         if role == "student" {
             guard report["audience"] as? String == "student", report["principal"] as? String == principal,
                   accounts.count == 1, accounts.values.first?["role"] as? String == "student" else { throw JournalError.format }
             let key = accounts.keys.first!
             let digest = report["digest"] as? [String: [[String: Any]]] ?? [:]
             guard (digest["actions", default: []] + digest["observations", default: []]).allSatisfy({ $0["child"] as? String == key }) else { throw JournalError.format }
-        } else if role != "parent" || report["audience"] as? String == "student" { throw JournalError.format }
+        } else {
+            guard role == "parent",
+                  report["audience"] == nil || report["audience"] as? String == "parent",
+                  report["principal"] == nil || report["principal"] as? String == "parent",
+                  accounts.values.allSatisfy({ $0["role"] == nil || $0["role"] as? String == "parent" })
+            else { throw JournalError.format }
+        }
+        for (key, account) in accounts {
+            if let child = account["child"], child as? String != key { throw JournalError.format }
+            var seen = Set<String>()
+            for source in ["messages", "announcements"] {
+                let kind = source == "messages" ? "message" : "announcement"
+                guard let records = account[source] else { continue }
+                guard let messages = records as? [[String: Any]], messages.allSatisfy({
+                    guard let id = $0["id"] as? String,
+                          id.hasPrefix(key + ":" + kind + ":"), $0["child"] as? String == key,
+                          $0["kind"] as? String == kind, seen.insert(id).inserted else { return false }
+                    return true
+                }) else { throw JournalError.format }
+            }
+        }
     }
     var encoded: String { String(data: try! JSONEncoder().encode(self), encoding: .utf8)! }
     static func restore(_ value: String) -> JournalAccess {
@@ -114,27 +155,265 @@ enum AccessKey {
     static func remove() { SecItemDelete(query as CFDictionary) }
 }
 
+// Both report and blob transfers are capped while receiving data, not after allocation.
+// A request owns its session and rejects every redirect, even to the same host.
+enum ReportDownloadError: Error { case notFound, invalidResponse, tooLarge }
+
+final class BoundedReportDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let request: URLRequest
+    private let maximum: Int
+    private let lock = NSLock()
+    private var buffer = Data()
+    private var continuation: CheckedContinuation<Data, Error>?
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var finished = false
+
+    private init(url: URL, maximum: Int) {
+        self.maximum = maximum
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        self.request = request
+    }
+    static func fetch(_ url: URL, maximum: Int) async throws -> Data {
+        guard url.scheme == ReportStore.siteRoot.scheme, url.host == ReportStore.siteRoot.host,
+              url.port == nil, url.user == nil, url.password == nil,
+              url.path.hasPrefix(ReportStore.siteRoot.path), maximum > 0
+        else { throw JournalError.format }
+        let download = BoundedReportDownload(url: url, maximum: maximum)
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { download.start($0) }
+        } onCancel: { download.finish(.failure(CancellationError())) }
+    }
+    private func start(_ continuation: CheckedContinuation<Data, Error>) {
+        lock.lock()
+        guard !finished else { lock.unlock(); continuation.resume(throwing: CancellationError()); return }
+        self.continuation = continuation
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForResource = 40
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        let task = session.dataTask(with: request)
+        self.session = session; self.task = task
+        lock.unlock()
+        task.resume()
+    }
+    private func finish(_ result: Result<Data, Error>) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        finished = true
+        let completion = self.continuation, currentSession = self.session
+        self.continuation = nil; self.session = nil; task = nil; buffer = Data()
+        lock.unlock()
+        currentSession?.invalidateAndCancel()
+        completion?.resume(with: result)
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+        finish(.failure(ReportDownloadError.invalidResponse))
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let response = response as? HTTPURLResponse,
+              response.url?.absoluteString == request.url?.absoluteString else {
+            completionHandler(.cancel); finish(.failure(ReportDownloadError.invalidResponse)); return
+        }
+        guard response.statusCode == 200 else {
+            completionHandler(.cancel)
+            finish(.failure(response.statusCode == 404 ? ReportDownloadError.notFound : ReportDownloadError.invalidResponse))
+            return
+        }
+        guard response.expectedContentLength <= Int64(maximum) else {
+            completionHandler(.cancel); finish(.failure(ReportDownloadError.tooLarge)); return
+        }
+        completionHandler(.allow)
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        guard data.count <= maximum - buffer.count else {
+            lock.unlock(); finish(.failure(ReportDownloadError.tooLarge)); return
+        }
+        buffer.append(data)
+        lock.unlock()
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error { finish(.failure(error)); return }
+        lock.lock(); let bytes = buffer; lock.unlock()
+        finish(.success(bytes))
+    }
+}
+
+struct EncryptedAttachment: Codable, Equatable, Sendable {
+    let v: Int
+    let path: String
+    let key: String
+    let iv: String
+    let sha256: String
+    let size: Int
+    static let maximumPlaintext = 8_000_000
+    static let maximumCiphertext = 8_000_016
+    static let fields: Set<String> = ["v", "path", "key", "iv", "sha256", "size"]
+
+    static func isDigest(_ value: String) -> Bool {
+        value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+    }
+    var paddedSize: Int { min(Self.maximumPlaintext, max(65_536, ((size + 65_535) / 65_536) * 65_536)) }
+    var ciphertextDigest: String { String(path.dropFirst("attachments/".count).dropLast(".bin".count)) }
+    func validate() throws {
+        guard v == 1, (0...Self.maximumPlaintext).contains(size),
+              path.hasPrefix("attachments/"), path.hasSuffix(".bin"),
+              Self.isDigest(ciphertextDigest), Self.isDigest(sha256),
+              let keyBytes = Data(base64Encoded: key), keyBytes.count == 32, keyBytes.base64EncodedString() == key,
+              let ivBytes = Data(base64Encoded: iv), ivBytes.count == 12, ivBytes.base64EncodedString() == iv
+        else { throw JournalError.format }
+    }
+    func decrypt(_ ciphertext: Data, aad: Data) throws -> Data {
+        try validate()
+        guard ciphertext.count == paddedSize + 16,
+              Self.digest(ciphertext) == ciphertextDigest else { throw JournalError.format }
+        let box = try AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: Data(base64Encoded: iv)!),
+                                       ciphertext: ciphertext.dropLast(16), tag: ciphertext.suffix(16))
+        let padded = try AES.GCM.open(box, using: SymmetricKey(data: Data(base64Encoded: key)!), authenticating: aad)
+        guard padded.count == paddedSize else { throw JournalError.format }
+        let bytes = Data(padded.prefix(size))
+        guard bytes.count == size, Self.digest(bytes) == sha256 else { throw JournalError.format }
+        return bytes
+    }
+    static func digest(_ bytes: Data) -> String { SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() }
+}
+
+struct NativeAttachmentRequest: Decodable, Sendable {
+    struct Scope: Decodable, Sendable { let audience: String; let principal: String }
+    let name: String
+    let accountKey: String
+    let source: String
+    let messageId: String
+    let attachmentIndex: Int
+    let ref: EncryptedAttachment
+    let scope: Scope
+
+    static func parse(_ body: [String: Any]) throws -> Self {
+        guard let reference = body["ref"] as? [String: Any],
+              Set(reference.keys) == EncryptedAttachment.fields else { throw JournalError.format }
+        let bytes = try JSONSerialization.data(withJSONObject: body)
+        guard bytes.count <= 16_384 else { throw JournalError.format }
+        return try JSONDecoder().decode(Self.self, from: bytes)
+    }
+}
+
+// The bridge only supplies a selector. The key and AAD always come from the
+// currently authenticated native snapshot, never directly from the web message.
+struct AuthorizedAttachment: Sendable {
+    let name: String
+    let ref: EncryptedAttachment
+    let aad: Data
+
+    static func resolve(_ request: NativeAttachmentRequest, reportText: String, access: JournalAccess) throws -> Self {
+        try access.validate(reportText)
+        guard let report = try JSONSerialization.jsonObject(with: Data(reportText.utf8)) as? [String: Any],
+              ReportJSON.integer(report["schema"]) == 2,
+              let accounts = report["accounts"] as? [String: [String: Any]],
+              let account = accounts[request.accountKey],
+              account["child"] as? String == request.accountKey,
+              ["messages", "announcements"].contains(request.source),
+              let messages = account[request.source] as? [[String: Any]],
+              request.messageId.hasPrefix(request.accountKey + (request.source == "messages" ? ":message:" : ":announcement:")),
+              request.attachmentIndex >= 0 else { throw JournalError.format }
+        let audience = report["audience"] as? String ?? "parent"
+        let principal = report["principal"] as? String ?? "parent"
+        guard request.scope.audience == audience, request.scope.principal == principal,
+              audience == access.role, principal == access.principal else { throw JournalError.format }
+        let matches = messages.filter { $0["id"] as? String == request.messageId }
+        guard matches.count == 1, let message = matches.first,
+              message["child"] as? String == request.accountKey,
+              message["kind"] as? String == (request.source == "messages" ? "message" : "announcement"),
+              let attachments = message["attachments"] as? [[String: Any]],
+              request.attachmentIndex < attachments.count else { throw JournalError.format }
+        let attachment = attachments[request.attachmentIndex]
+        guard attachment["base64"] == nil, attachment["error"] == nil,
+              let reference = attachment["encrypted_attachment"] as? [String: Any],
+              Set(reference.keys) == EncryptedAttachment.fields else { throw JournalError.format }
+        let ref = try JSONDecoder().decode(EncryptedAttachment.self, from: JSONSerialization.data(withJSONObject: reference))
+        try ref.validate()
+        let name = (attachment["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "zalacznik"
+        guard request.ref == ref, request.name == name else { throw JournalError.format }
+        let aad: [Any] = ["promenada-attachment-v1", audience, principal, request.accountKey,
+                          request.messageId, request.attachmentIndex, ref.sha256, ref.size]
+        return Self(name: name, ref: ref, aad: try JSONSerialization.data(withJSONObject: aad, options: [.withoutEscapingSlashes]))
+    }
+}
+
 actor ReportStore {
     private var revision = 0
+    private var activeRevision = 0
+    private var activeText: String?
+    private var activeAccess: JournalAccess?
     #if DEBUG
     private var fixtureLoads = 0
     #endif
-    static let endpoint = URL(string: "https://jakiesluchawki.github.io/promenada-dziennik/report.enc.json")!
-    private func cachedURL(_ access: JournalAccess) -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(access.role == "parent" ? "last-report.enc.json" : "student-" + access.principal + ".enc.json")
+    static let siteRoot = URL(string: "https://jakiesluchawki.github.io/promenada-dziennik/")!
+    static let endpoint = siteRoot.appendingPathComponent("report.enc.json")
+    private var directory: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] }
+    private func cachedURL(_ access: JournalAccess, legacy: Bool = false) -> URL {
+        let prefix = access.role == "parent" ? "last-report" : "student-" + access.principal
+        return directory.appendingPathComponent(prefix + (legacy ? ".enc.json" : ".v2.enc.json"))
+    }
+    private func cachedBytes(_ access: JournalAccess) throws -> Data? {
+        // An old schema1 snapshot remains readable after the upgrade. Never overwrite it.
+        let modern = cachedURL(access)
+        let url = FileManager.default.fileExists(atPath: modern.path) ? modern : cachedURL(access, legacy: true)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return try boundedLocalRead(url, maximum: 25_000_000)
+    }
+    private func boundedLocalRead(_ url: URL, maximum: Int) throws -> Data {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard let size = attributes[.size] as? NSNumber, size.int64Value <= Int64(maximum),
+              attributes[.type] as? FileAttributeType == .typeRegular else { throw JournalError.format }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let bytes = try handle.read(upToCount: maximum + 1) ?? Data()
+        guard bytes.count <= maximum else { throw JournalError.format }
+        return bytes
+    }
+    private func activate(_ text: String, access: JournalAccess) {
+        activeRevision += 1; activeText = text; activeAccess = access
     }
     func cached(access: JournalAccess) throws -> String? {
-        guard let bytes = try? Data(contentsOf: cachedURL(access)) else { return nil }
+        try Task.checkCancellation()
+        guard let bytes = try cachedBytes(access) else { return nil }
         let text = try ReportCipher.decrypt(bytes, password: access.password)
         try access.validate(text)
+        try Task.checkCancellation()
+        activate(text, access: access)
         return text
+    }
+    private func downloadReport(_ access: JournalAccess) async throws -> (bytes: Data, requiresSchema2: Bool) {
+        func fresh(_ endpoint: URL) -> URL {
+            var parts = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
+            parts.queryItems = [URLQueryItem(name: "t", value: String(Date().timeIntervalSince1970))]
+            return parts.url!
+        }
+        do {
+            let bytes = try await BoundedReportDownload.fetch(fresh(access.v2Endpoint), maximum: 25_000_000)
+            return (bytes, true)
+        }
+        catch ReportDownloadError.notFound {
+            // Only absence enables v1 transport; never downgrade on authentication or network errors.
+            try Task.checkCancellation()
+            let bytes = try await BoundedReportDownload.fetch(fresh(access.endpoint), maximum: 25_000_000)
+            return (bytes, false)
+        }
     }
     func load(access: JournalAccess) async throws -> (text: String, offline: Bool) {
         let startedAtRevision = revision
-        let cachedURL = cachedURL(access)
-        let endpoint = access.endpoint
         var encrypted: Data
+        var requiresSchema2 = false
         var offline = false
         do {
             #if DEBUG
@@ -144,58 +423,73 @@ actor ReportStore {
                 let selected = fixtureLoads > 1 ? ProcessInfo.processInfo.environment["PROMENADA_TEST_NEXT_REPORT"] ?? fixture : fixture
                 guard let bytes = Data(base64Encoded: selected) else { throw JournalError.format }
                 encrypted = bytes
+                requiresSchema2 = ProcessInfo.processInfo.environment["PROMENADA_TEST_REQUIRE_SCHEMA2"] == "1"
             } else {
-            var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
-            components.queryItems = [URLQueryItem(name: "t", value: String(Date().timeIntervalSince1970))]
-            var request = URLRequest(url: components.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
-            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.httpShouldSetCookies = false
-            let session = URLSession(configuration: configuration)
-            defer { session.invalidateAndCancel() }
-            let (bytes, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-                  http.url?.host == endpoint.host, bytes.count <= 25_000_000 else { throw JournalError.network }
-            encrypted = bytes
+                let result = try await downloadReport(access)
+                encrypted = result.bytes; requiresSchema2 = result.requiresSchema2
             }
             #else
-            var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
-            components.queryItems = [URLQueryItem(name: "t", value: String(Date().timeIntervalSince1970))]
-            var request = URLRequest(url: components.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
-            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.httpShouldSetCookies = false
-            let session = URLSession(configuration: configuration)
-            defer { session.invalidateAndCancel() }
-            let (bytes, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-                  http.url?.host == endpoint.host, bytes.count <= 25_000_000 else { throw JournalError.network }
-            encrypted = bytes
+            let result = try await downloadReport(access)
+            encrypted = result.bytes; requiresSchema2 = result.requiresSchema2
             #endif
         } catch {
-            guard let cached = try? Data(contentsOf: cachedURL) else { throw JournalError.network }
-            encrypted = cached
-            offline = true
+            try Task.checkCancellation()
+            guard startedAtRevision == revision else { throw CancellationError() }
+            guard let cached = try cachedBytes(access) else { throw JournalError.network }
+            encrypted = cached; requiresSchema2 = false; offline = true
         }
+        try Task.checkCancellation()
         guard startedAtRevision == revision else { throw CancellationError() }
-        let text = try ReportCipher.decrypt(encrypted, password: access.password)
+        let text = try ReportCipher.decrypt(encrypted, password: access.password, requiresSchema2: requiresSchema2)
         try access.validate(text)
-        if !offline {
-            let directory = cachedURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try encrypted.write(to: cachedURL, options: [.atomic, .completeFileProtection])
-            var url = cachedURL
-            var flags = URLResourceValues()
-            flags.isExcludedFromBackup = true
-            try url.setResourceValues(flags)
-        }
+        try Task.checkCancellation()
+        if !offline { try protectedWrite(encrypted, to: cachedURL(access)) }
+        activate(text, access: access)
         return (text, offline)
     }
+    private func protectedWrite(_ bytes: Data, to destination: URL) throws {
+        let parent = destination.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true,
+                                                attributes: [.protectionKey: FileProtectionType.complete])
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: parent.path)
+        var flags = URLResourceValues(); flags.isExcludedFromBackup = true
+        var protectedDirectory = parent
+        try protectedDirectory.setResourceValues(flags)
+        try bytes.write(to: destination, options: [.atomic, .completeFileProtection])
+        var url = destination; try url.setResourceValues(flags)
+    }
+    func attachment(_ request: NativeAttachmentRequest, access: JournalAccess) async throws -> (name: String, bytes: Data) {
+        try Task.checkCancellation()
+        guard activeAccess == access, let text = activeText else { throw JournalError.format }
+        let startedAtRevision = revision, startedAtActiveRevision = activeRevision
+        let authorized = try AuthorizedAttachment.resolve(request, reportText: text, access: access)
+        let ref = authorized.ref
+        let cache = directory.appendingPathComponent("PromenadaAttachments", isDirectory: true)
+            .appendingPathComponent(access.role + "-" + access.principal, isDirectory: true)
+            .appendingPathComponent(ref.ciphertextDigest + ".bin")
+        if let encrypted = try? boundedLocalRead(cache, maximum: EncryptedAttachment.maximumCiphertext),
+           let bytes = try? ref.decrypt(encrypted, aad: authorized.aad) {
+            try Task.checkCancellation()
+            return (authorized.name, bytes)
+        }
+        // Immutable ciphertext-hash URLs need no query and never leave the fixed publication root.
+        let encrypted = try await BoundedReportDownload.fetch(Self.siteRoot.appendingPathComponent(ref.path),
+                                                               maximum: min(EncryptedAttachment.maximumCiphertext, ref.paddedSize + 16))
+        try Task.checkCancellation()
+        guard revision == startedAtRevision, activeRevision == startedAtActiveRevision, activeAccess == access
+        else { throw CancellationError() }
+        let bytes = try ref.decrypt(encrypted, aad: authorized.aad)
+        try Task.checkCancellation()
+        try protectedWrite(encrypted, to: cache)
+        return (authorized.name, bytes)
+    }
     func clear() {
-        revision += 1
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        revision += 1; activeRevision += 1; activeText = nil; activeAccess = nil
         for url in (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] {
-            if url.lastPathComponent == "last-report.enc.json" || (url.lastPathComponent.hasPrefix("student-") && url.pathExtension == "json") { try? FileManager.default.removeItem(at: url) }
+            if ["last-report.enc.json", "last-report.v2.enc.json", "PromenadaAttachments"].contains(url.lastPathComponent) ||
+                (url.lastPathComponent.hasPrefix("student-") && url.pathExtension == "json") {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 }
