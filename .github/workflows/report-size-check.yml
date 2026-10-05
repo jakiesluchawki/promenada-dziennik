@@ -5,7 +5,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: synthetic-report-checks-${{ github.ref }}
+  # Separate the Intel pool from an older arm64 run stuck during cancellation.
+  group: synthetic-report-checks-intel-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   synthetic-tests:
