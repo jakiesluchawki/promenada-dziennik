@@ -11,6 +11,28 @@ Plik produkcyjny: `ios/Promenada/Assets.xcassets/AppIcon.appiconset/AppIcon.png`
 Ostateczne korekty użytkownika: mały, wyraźnie długi jamnik na rękach młodszego
 chłopca; starszy ma swobodną pozę i spodnie dzwony. Młodszy zachowany.
 Dodatkowo użytkownik zatwierdził kompozycję i poprosił o filcową fakturę tła.
+Końcowa sceneria zastępuje różowe studio jasnym niebem, chmurami i spokojną
+uliczką do szkoły, z zachowaniem filcowej stylistyki oraz postaci.
+
+Prompt scenerii: Edit the BACKGROUND/ENVIRONMENT ONLY of this approved felt family
+app icon. The owner wants an actual gentle outdoor setting, not a solid pink
+studio backdrop: a pale powder-blue open sky with a few delicate cream felt
+clouds, and a quiet light warm-stone pedestrian street/cobbled path leading toward
+the school, perhaps subtly curving past the existing low hedges. Render the whole
+outdoor environment in the same refined handcrafted fine wool-felt miniature
+aesthetic, with soft natural daylight, atmospheric separation, very subtle
+details and pastel colours. The sky should feel spacious and delicate; ground
+should be a believable quiet school street, not a pink carpet. Preserve existing
+cream school as the main background building and the white glider flying in the
+sky. Preserve EXACTLY the approved foreground group: taller brown-haired boy
+Kostek in olive sweater and flared bell-bottom trousers, relaxed leaning pose and
+hand in pocket; smaller blonde Wicio in blue with unchanged face, expression and
+clothes, holding the small long brown dachshund Rabarbar. Preserve their scale,
+placement, silhouettes and fine felt texture. Subjects stay dominant; background
+stays restrained, simple and legible at tiny icon sizes. No extra characters,
+animals, cars, signs, lettering or decoration. No border. Square opaque full-bleed
+iOS app icon. This is a coherent felt outdoor diorama rather than a studio
+still-life, NOT a photorealistic photographic background.
 
 Prompt faktury: Edit ONLY the plain pink background and pink floor of this exact
 approved app icon. Replace the flat solid pink surface with beautiful visibly
