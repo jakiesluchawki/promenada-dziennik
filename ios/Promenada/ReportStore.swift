@@ -162,6 +162,7 @@ enum ReportDownloadError: Error { case notFound, invalidResponse, tooLarge }
 final class BoundedReportDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let request: URLRequest
     private let maximum: Int
+    private let configuration: URLSessionConfiguration
     private let lock = NSLock()
     private var buffer = Data()
     private var continuation: CheckedContinuation<Data, Error>?
@@ -169,19 +170,34 @@ final class BoundedReportDownload: NSObject, URLSessionDataDelegate, @unchecked 
     private var task: URLSessionDataTask?
     private var finished = false
 
-    private init(url: URL, maximum: Int) {
+    private init(url: URL, maximum: Int, configuration: URLSessionConfiguration) {
         self.maximum = maximum
+        self.configuration = configuration
+        configuration.httpShouldSetCookies = false
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForResource = 40
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         self.request = request
     }
     static func fetch(_ url: URL, maximum: Int) async throws -> Data {
+        try await fetch(url, maximum: maximum, configuration: .ephemeral)
+    }
+    #if DEBUG
+    // XCTest supplies an in-process URLProtocol; production has no injectable transport.
+    static func testFetch(_ url: URL, maximum: Int, protocols: [AnyClass]) async throws -> Data {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = protocols
+        return try await fetch(url, maximum: maximum, configuration: configuration)
+    }
+    #endif
+    private static func fetch(_ url: URL, maximum: Int, configuration: URLSessionConfiguration) async throws -> Data {
         guard url.scheme == ReportStore.siteRoot.scheme, url.host == ReportStore.siteRoot.host,
               url.port == nil, url.user == nil, url.password == nil,
               url.path.hasPrefix(ReportStore.siteRoot.path), maximum > 0
         else { throw JournalError.format }
-        let download = BoundedReportDownload(url: url, maximum: maximum)
+        let download = BoundedReportDownload(url: url, maximum: maximum, configuration: configuration)
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await withCheckedThrowingContinuation { download.start($0) }
@@ -191,10 +207,6 @@ final class BoundedReportDownload: NSObject, URLSessionDataDelegate, @unchecked 
         lock.lock()
         guard !finished else { lock.unlock(); continuation.resume(throwing: CancellationError()); return }
         self.continuation = continuation
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpShouldSetCookies = false
-        configuration.urlCache = nil
-        configuration.timeoutIntervalForResource = 40
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
         let task = session.dataTask(with: request)
         self.session = session; self.task = task
@@ -350,6 +362,19 @@ struct AuthorizedAttachment: Sendable {
 }
 
 actor ReportStore {
+    private let cacheDirectory: URL
+    private let fetch: @Sendable (URL, Int) async throws -> Data
+    init() {
+        cacheDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        fetch = { try await BoundedReportDownload.fetch($0, maximum: $1) }
+    }
+    #if DEBUG
+    // Isolated synthetic caches and transport are available only to Debug tests.
+    init(testDirectory: URL, testFetch: @escaping @Sendable (URL, Int) async throws -> Data) {
+        cacheDirectory = testDirectory
+        fetch = testFetch
+    }
+    #endif
     private var revision = 0
     private var activeRevision = 0
     private var activeText: String?
@@ -359,7 +384,7 @@ actor ReportStore {
     #endif
     static let siteRoot = URL(string: "https://jakiesluchawki.github.io/promenada-dziennik/")!
     static let endpoint = siteRoot.appendingPathComponent("report.enc.json")
-    private var directory: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] }
+    private var directory: URL { cacheDirectory }
     private func cachedURL(_ access: JournalAccess, legacy: Bool = false) -> URL {
         let prefix = access.role == "parent" ? "last-report" : "student-" + access.principal
         return directory.appendingPathComponent(prefix + (legacy ? ".enc.json" : ".v2.enc.json"))
@@ -400,13 +425,13 @@ actor ReportStore {
             return parts.url!
         }
         do {
-            let bytes = try await BoundedReportDownload.fetch(fresh(access.v2Endpoint), maximum: 25_000_000)
+            let bytes = try await fetch(fresh(access.v2Endpoint), 25_000_000)
             return (bytes, true)
         }
         catch ReportDownloadError.notFound {
             // Only absence enables v1 transport; never downgrade on authentication or network errors.
             try Task.checkCancellation()
-            let bytes = try await BoundedReportDownload.fetch(fresh(access.endpoint), maximum: 25_000_000)
+            let bytes = try await fetch(fresh(access.endpoint), 25_000_000)
             return (bytes, false)
         }
     }
@@ -473,8 +498,8 @@ actor ReportStore {
             return (authorized.name, bytes)
         }
         // Immutable ciphertext-hash URLs need no query and never leave the fixed publication root.
-        let encrypted = try await BoundedReportDownload.fetch(Self.siteRoot.appendingPathComponent(ref.path),
-                                                               maximum: min(EncryptedAttachment.maximumCiphertext, ref.paddedSize + 16))
+        let encrypted = try await fetch(Self.siteRoot.appendingPathComponent(ref.path),
+                                        min(EncryptedAttachment.maximumCiphertext, ref.paddedSize + 16))
         try Task.checkCancellation()
         guard revision == startedAtRevision, activeRevision == startedAtActiveRevision, activeAccess == access
         else { throw CancellationError() }

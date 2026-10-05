@@ -35,3 +35,33 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath "$RUNNER_TEMP/mahbrus-v2-build"
           CODE_SIGNING_ALLOWED=NO build
+  simulator-runtime:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Select an available iPhone Simulator
+        id: simulator
+        run: python3 ios/tests/select-test-simulator.py
+      - name: Run synthetic store, cache, isolation and logout tests
+        run: >-
+          xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
+          -configuration Debug -sdk iphonesimulator
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
+          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -derivedDataPath "$RUNNER_TEMP/mahbrus-runtime-build"
+          -resultBundlePath "$RUNNER_TEMP/mahbrus-runtime-results.xcresult"
+          -only-testing:PromenadaRuntimeTests CODE_SIGNING_ALLOWED=NO
+      - name: Run synthetic legacy login, offline, logout and student rejection UI smoke
+        run: >-
+          xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
+          -configuration Debug -sdk iphonesimulator
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
+          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -derivedDataPath "$RUNNER_TEMP/mahbrus-runtime-build"
+          -resultBundlePath "$RUNNER_TEMP/mahbrus-legacy-ui-results.xcresult"
+          -only-testing:PromenadaUITests/PromenadaUITests/testRememberedAccessOfflineAndLogout
+          -only-testing:PromenadaUITests/PromenadaUITests/testStudentRejectsFamilyReportEvenWithItsPassword
+          CODE_SIGNING_ALLOWED=NO

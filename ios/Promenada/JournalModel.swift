@@ -10,7 +10,14 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
     @Published var confirmForget = false
     @Published var attachment: ShareItem?
     private weak var web: WKWebView?
-    private let store = ReportStore()
+    private let store: ReportStore
+    override init() { store = ReportStore(); super.init() }
+    #if DEBUG
+    init(testStore: ReportStore) { store = testStore; super.init() }
+    func testInstallAccess(_ access: JournalAccess) { self.access = access; ready = true; open = true; busy = false }
+    func testReceiveAttachment(_ body: [String: Any]) { openAttachment(body) }
+    func testPendingAttachment() -> Task<Void, Never>? { attachmentTask }
+    #endif
     private var lastCheck = Date.distantPast
     private var generation = 0
     private var ready = false
@@ -69,39 +76,41 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
                (try? JSONSerialization.jsonObject(with: bytes)) is [String: Any] {
                 UserDefaults.standard.set(value, forKey: reviewKey)
             }
-        case "attachment":
-            guard open, !busy, let access else { return }
-            cancelAttachmentLoad()
-            if body["ref"] != nil || body["scope"] != nil {
-                do {
-                    let request = try NativeAttachmentRequest.parse(body)
-                    let requestGeneration = generation, requestAttachmentGeneration = attachmentGeneration
-                    sendStatus("Otwieram załącznik…")
-                    attachmentTask = Task {
-                        do {
-                            let result = try await store.attachment(request, access: access)
-                            try Task.checkCancellation()
-                            guard generation == requestGeneration, attachmentGeneration == requestAttachmentGeneration,
-                                  self.access == access, open else { return }
-                            try share(result.bytes, name: result.name)
-                            sendStatus("")
-                        } catch {
-                            guard !Task.isCancelled, generation == requestGeneration,
-                                  attachmentGeneration == requestAttachmentGeneration else { return }
-                            sendStatus("Nie udało się otworzyć załącznika. Bez internetu dostępne są tylko wcześniej otwarte załączniki.")
-                        }
-                    }
-                } catch { sendStatus("Załącznik ma nieprawidłowy format. Wczytaj raport ponownie.") }
-            } else {
-                // Keep schema1 / existing native-bridge sharing compatible.
-                guard let filename = body["name"] as? String,
-                      let base64 = body["base64"] as? String,
-                      base64.utf8.count <= ((EncryptedAttachment.maximumPlaintext + 2) / 3) * 4,
-                      let bytes = Data(base64Encoded: base64), bytes.count <= EncryptedAttachment.maximumPlaintext else { return }
-                do { try share(bytes, name: filename) }
-                catch { sendStatus("Nie udało się otworzyć załącznika. Spróbuj ponownie.") }
-            }
+        case "attachment": openAttachment(body)
         default: break
+        }
+    }
+    private func openAttachment(_ body: [String: Any]) {
+        guard open, !busy, let access else { return }
+        cancelAttachmentLoad()
+        if body["ref"] != nil || body["scope"] != nil {
+            do {
+                let request = try NativeAttachmentRequest.parse(body)
+                let requestGeneration = generation, requestAttachmentGeneration = attachmentGeneration
+                sendStatus("Otwieram załącznik…")
+                attachmentTask = Task {
+                    do {
+                        let result = try await store.attachment(request, access: access)
+                        try Task.checkCancellation()
+                        guard generation == requestGeneration, attachmentGeneration == requestAttachmentGeneration,
+                              self.access == access, open else { return }
+                        try share(result.bytes, name: result.name)
+                        sendStatus("")
+                    } catch {
+                        guard !Task.isCancelled, generation == requestGeneration,
+                              attachmentGeneration == requestAttachmentGeneration else { return }
+                        sendStatus("Nie udało się otworzyć załącznika. Bez internetu dostępne są tylko wcześniej otwarte załączniki.")
+                    }
+                }
+            } catch { sendStatus("Załącznik ma nieprawidłowy format. Wczytaj raport ponownie.") }
+        } else {
+            // Keep schema1 / existing native-bridge sharing compatible.
+            guard let filename = body["name"] as? String,
+                  let base64 = body["base64"] as? String,
+                  base64.utf8.count <= ((EncryptedAttachment.maximumPlaintext + 2) / 3) * 4,
+                  let bytes = Data(base64Encoded: base64), bytes.count <= EncryptedAttachment.maximumPlaintext else { return }
+            do { try share(bytes, name: filename) }
+            catch { sendStatus("Nie udało się otworzyć załącznika. Spróbuj ponownie.") }
         }
     }
     func unlock(_ credentials: JournalAccess, refreshing: Bool = false, automatic: Bool = false) {
