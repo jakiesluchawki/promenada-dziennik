@@ -15,6 +15,30 @@ ITERATIONS=600000
 MAX_REPORT_BYTES=25_000_000
 os.umask(0o077)
 def canonical(d):return json.dumps(d,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+def unique_attachments(attachments):
+    """Remove only byte-for-byte equivalent records within one message.
+
+    Keep different names, metadata and failures; never coalesce messages/accounts
+    or replace inline data with references unsupported by existing clients.
+    """
+    seen=set();result=[]
+    for attachment in attachments:
+        if not attachment.get("base64") or attachment.get("error"):
+            result.append(attachment);continue
+        encoded=canonical(attachment)
+        if encoded not in seen:
+            seen.add(encoded);result.append(attachment)
+    return result
+
+def report_size_metrics(report, encrypted_bytes):
+    """Content-free totals only: no account keys, filenames, URLs or text."""
+    attachment_bytes=sum(len(canonical(f)) for a in report["accounts"].values()
+                         for kind in ("messages","announcements")
+                         for m in a.get(kind,[]) for f in m.get("attachments",[]))
+    return {"encrypted_bytes":encrypted_bytes,
+            "plaintext_bytes":len(canonical(report)),
+            "attachment_bytes":attachment_bytes}
+
 def key_for(password,salt):
     return PBKDF2HMAC(algorithm=hashes.SHA256(),length=32,salt=salt,iterations=ITERATIONS).derive(password.encode())
 def encrypt(d,password):
@@ -45,6 +69,8 @@ def load_report():
             s["revision"]=hashlib.sha256(canonical([key,section_name,s])).hexdigest()[:32]
         for kind in ["messages","announcements"]:
             for m in a.get(kind,[]):
+                if "attachments" in m:
+                    m["attachments"]=unique_attachments(m["attachments"])
                 m["revision"]=hashlib.sha256(canonical([m["id"],m["title"],m["text"],[(f["name"],f.get("size",0)) for f in m.get("attachments",[])]] )).hexdigest()[:32]
     for a in digest.get("actions",[]):
         a["id"]=hashlib.sha256(canonical([a["child"],a.get("source_id",a.get("section","")),a["title"]])).hexdigest()[:24]
@@ -114,7 +140,8 @@ def build(publish=False, on_phase=lambda phase: None):
     assert decrypt(envelope,password)==report
     on_phase("write_ciphertext")
     payload=json.dumps(envelope,separators=(",",":"))
-    if len(payload.encode())>MAX_REPORT_BYTES:raise ReportError("report_too_large")
+    if len(payload.encode())>MAX_REPORT_BYTES:
+        raise ReportError("report_too_large", report_size_metrics(report,len(payload.encode())))
     path=SITE/"report.enc.json";tmp=SITE/"report.enc.tmp";tmp.write_text(payload);tmp.replace(path)
     on_phase("audit_public_files")
     audit()
