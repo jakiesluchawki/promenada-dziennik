@@ -10,6 +10,20 @@ Plik produkcyjny: `ios/Promenada/Assets.xcassets/AppIcon.appiconset/AppIcon.png`
 1024 × 1024, bez kanału alpha; zaokrąglenie nadaje system iOS.
 Ostateczne korekty użytkownika: mały, wyraźnie długi jamnik na rękach młodszego
 chłopca; starszy ma swobodną pozę i spodnie dzwony. Młodszy zachowany.
+Dodatkowo użytkownik zatwierdził kompozycję i poprosił o filcową fakturę tła.
+
+Prompt faktury: Edit ONLY the plain pink background and pink floor of this exact
+approved app icon. Replace the flat solid pink surface with beautiful visibly
+tactile soft blush-pink wool felt: subtle fine natural fibres, gentle fuzzy nap,
+delicate tonal mottling and believable handmade felt material. Retain a quiet
+seamless studio backdrop/floor, soft existing shadows and the same pink colour
+family. Texture should be clearly felt-like but restrained, with no seams,
+patterns, stripes, speckles, wrinkles or extra objects. ABSOLUTELY preserve the
+approved two felt boys, their faces, hair, expressions, height ratio, clothes
+including the older boy's olive flared bell-bottom trousers and relaxed posture,
+the smaller blue boy holding the small LONG dachshund, the school and the glider.
+Do not redraw or change those foreground elements. Same square composition, full
+bleed opaque image, no border, no text.
 
 Prompt końcowej korekty: Refine this exact felt iOS app icon with two precise
 changes requested by the owner. 1. Rabarbar must be unmistakably a DACHSHUND: a
