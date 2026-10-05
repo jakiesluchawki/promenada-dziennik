@@ -1,5 +1,33 @@
 # Ilustracje Promenady
 
+## Ikona aplikacji — build 4
+
+Wygenerowana wbudowanym Imagegen na życzenie użytkownika, z natywną ikoną
+CHMURNIKA jako odniesieniem stylistycznym. Przedstawia dwie umowne filcowe
+postacie: większego chłopca w oliwkowym stroju, mniejszego w niebieskim,
+jamnika, szkołę i szybowiec. Nie jest portretem na podstawie fotografii dzieci.
+Plik produkcyjny: `ios/Promenada/Assets.xcassets/AppIcon.appiconset/AppIcon.png`,
+1024 × 1024, bez kanału alpha; zaokrąglenie nadaje system iOS.
+
+Prompt: Create a finished square iOS app icon for a private family school journal
+called Mahbrus. Use the attached CHMURNIK icon ONLY as a visual style reference:
+tactile fine wool felt / cut-paper sculptural miniature, soft rounded forms,
+warm pale powder-pink studio background, warm cream, muted olive and powder blue,
+quiet premium handcrafted character. New subject: two sweet stylized felt boys
+standing together in front of a small cream school with simple windows and
+entrance. One older/taller boy Kostek in olive clothes; one much smaller little
+boy Wicio in powder blue clothes. A recognizable brown dachshund Rabarbar with
+long body, short legs and floppy ears sits beside little Wicio. Above and behind
+them, a small elegant white sailplane/glider with very long straight wings and
+NO propeller flies in the pale sky. Boys and dog dominate composition and remain
+recognizable at small icon sizes; school and glider are secondary but clearly
+visible. Subtle simple facial features, warm gentle mood, NOT photographic
+portraits. Beautiful balanced compact 3D felt diorama, soft daylight shadows and
+fine material texture. Full-bleed opaque square background, no rounded outer
+border, no outside margin, iOS will mask the corners. Keep all important subjects
+in central 80%. No words, letters, logo, watermark, extra people, extra animals or
+extra objects. 1024 by 1024 square production app icon.
+
 Autorski zestaw wygenerowany w Imagegen na podstawie filcowej stylistyki CHMURNIKA. Fonty Romie i Roobert pochodzą z projektu CHMURNIK.
 
 ## overview
