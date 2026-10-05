@@ -364,15 +364,23 @@ struct AuthorizedAttachment: Sendable {
 actor ReportStore {
     private let cacheDirectory: URL
     private let fetch: @Sendable (URL, Int) async throws -> Data
+    #if DEBUG
+    private let testBeforeCacheMetadata: (@Sendable (URL) throws -> Void)?
+    #endif
     init() {
         cacheDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         fetch = { try await BoundedReportDownload.fetch($0, maximum: $1) }
+        #if DEBUG
+        testBeforeCacheMetadata = nil
+        #endif
     }
     #if DEBUG
     // Isolated synthetic caches and transport are available only to Debug tests.
-    init(testDirectory: URL, testFetch: @escaping @Sendable (URL, Int) async throws -> Data) {
+    init(testDirectory: URL, testBeforeCacheMetadata: (@Sendable (URL) throws -> Void)? = nil,
+         testFetch: @escaping @Sendable (URL, Int) async throws -> Data) {
         cacheDirectory = testDirectory
         fetch = testFetch
+        self.testBeforeCacheMetadata = testBeforeCacheMetadata
     }
     #endif
     private var revision = 0
@@ -480,8 +488,21 @@ actor ReportStore {
         var flags = URLResourceValues(); flags.isExcludedFromBackup = true
         var protectedDirectory = parent
         try protectedDirectory.setResourceValues(flags)
-        try bytes.write(to: destination, options: [.atomic, .completeFileProtection])
-        var url = destination; try url.setResourceValues(flags)
+        // Prepare every required attribute on a sibling before replacing the good cache.
+        let staging = parent.appendingPathComponent(".promenada-pending-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try bytes.write(to: staging, options: [.atomic, .completeFileProtection])
+        #if DEBUG
+        try testBeforeCacheMetadata?(staging)
+        #endif
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: staging.path)
+        var stagedURL = staging; try stagedURL.setResourceValues(flags)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: staging,
+                                                       backupItemName: nil, options: [.usingNewMetadataOnly])
+        } else {
+            try FileManager.default.moveItem(at: staging, to: destination)
+        }
     }
     func attachment(_ request: NativeAttachmentRequest, access: JournalAccess) async throws -> (name: String, bytes: Data) {
         try Task.checkCancellation()
@@ -512,6 +533,7 @@ actor ReportStore {
         revision += 1; activeRevision += 1; activeText = nil; activeAccess = nil
         for url in (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] {
             if ["last-report.enc.json", "last-report.v2.enc.json", "PromenadaAttachments"].contains(url.lastPathComponent) ||
+                url.lastPathComponent.hasPrefix(".promenada-pending-") ||
                 (url.lastPathComponent.hasPrefix("student-") && url.pathExtension == "json") {
                 try? FileManager.default.removeItem(at: url)
             }

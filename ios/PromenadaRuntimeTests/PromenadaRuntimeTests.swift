@@ -56,7 +56,7 @@ private actor DelayedBytes {
     }
     func release(_ bytes: Data) { continuation?.resume(returning: bytes); continuation = nil }
 }
-private enum SyntheticFailure: Error { case timeout }
+private enum SyntheticFailure: Error { case timeout, metadata }
 
 private struct Fixture {
     let access: JournalAccess
@@ -143,17 +143,47 @@ final class PromenadaRuntimeTests: XCTestCase {
         root.appendingPathComponent("PromenadaAttachments/" + fixture.access.role + "-" + fixture.access.principal)
             .appendingPathComponent(fixture.ref.ciphertextDigest + ".bin")
     }
-    private func assertProtected(_ url: URL, file: StaticString = #filePath, line: UInt = #line) throws {
-        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        let metadata = attributes[.protectionKey]
-        // FileManager may bridge this attribute as NSString rather than the Swift wrapper.
-        let protection = (metadata as? FileProtectionType)?.rawValue ?? (metadata as? String)
-        let metadataType = metadata.map { String(reflecting: type(of: $0)) } ?? "<missing>"
-        XCTAssertEqual(protection, FileProtectionType.complete.rawValue,
-                       "Protection metadata for \(url.lastPathComponent): type=\(metadataType), raw=\(String(describing: metadata)). Simulator metadata is not physical locked-device validation.",
-                       file: file, line: line)
+    private func protectionValue(_ url: URL) throws -> String? {
+        let metadata = try FileManager.default.attributesOfItem(atPath: url.path)[.protectionKey]
+        return (metadata as? FileProtectionType)?.rawValue ?? (metadata as? String)
+    }
+    private func assertExcludedFromBackup(_ url: URL, file: StaticString = #filePath, line: UInt = #line) throws {
         XCTAssertEqual(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true, file: file, line: line)
-        // Simulator verifies requested attributes, not physical locked-device key eviction.
+    }
+    private func assertCompleteProtection(_ url: URL, file: StaticString = #filePath, line: UInt = #line) throws {
+        XCTAssertEqual(try protectionValue(url), FileProtectionType.complete.rawValue,
+                       "Expected complete protection for \(url.lastPathComponent)", file: file, line: line)
+    }
+
+    @MainActor
+    func testCompleteProtectionMetadataOnReportBlobAndShares() async throws {
+        // Probe the platform directly before testing app-created files. Some Simulator
+        // runtimes accept setAttributes but omit protectionKey even for this control file.
+        // Only that independently demonstrated Simulator limitation permits a skip.
+        let control = root.appendingPathComponent("protection-control.txt")
+        try Data("synthetic protection control".utf8).write(to: control, options: [.completeFileProtection])
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: control.path)
+        #if targetEnvironment(simulator)
+        if try protectionValue(control) == nil {
+            throw XCTSkip("Simulator omits protectionKey for a directly protected control file; physical-device protection verification remains required.")
+        }
+        #endif
+        try assertCompleteProtection(control)
+        let f = Self.parent; configure(f)
+        let reader = store(); _ = try await reader.load(access: f.access)
+        _ = try await reader.attachment(f.request, access: f.access)
+        // Repeat writes to cover atomic replacement as well as first creation.
+        _ = try await reader.load(access: f.access)
+        let snapshot = root.appendingPathComponent("last-report.v2.enc.json"), blob = blobURL(f)
+        for url in [snapshot, blob, blob.deletingLastPathComponent()] {
+            try assertCompleteProtection(url)
+        }
+        let model = JournalModel(testStore: reader); model.testInstallAccess(f.access)
+        defer { model.removeShare() }
+        model.testReceiveAttachment(["name": "legacy-demo.txt", "base64": f.plaintext.base64EncodedString()])
+        try assertCompleteProtection(XCTUnwrap(model.attachment?.url))
+        model.testReceiveAttachment(f.body); await model.testPendingAttachment()?.value
+        try assertCompleteProtection(XCTUnwrap(model.attachment?.url))
     }
     private func rejects(_ operation: () async throws -> Void, file: StaticString = #filePath, line: UInt = #line) async {
         do { try await operation(); XCTFail("Operation unexpectedly succeeded", file: file, line: line) } catch {}
@@ -204,7 +234,7 @@ final class PromenadaRuntimeTests: XCTestCase {
         XCTAssertEqual(SyntheticURLProtocol.state.requests, [f.access.v2Endpoint.path, f.access.endpoint.path])
     }
 
-    func testEncryptedCacheRoundtripProtectionAndOfflineOpen() async throws {
+    func testEncryptedCacheRoundtripBackupExclusionAndOfflineOpen() async throws {
         let f = Self.parent; configure(f)
         let reader = store()
         let report = try await reader.load(access: f.access)
@@ -215,7 +245,7 @@ final class PromenadaRuntimeTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: snapshot), f.encrypted)
         XCTAssertEqual(try Data(contentsOf: blob), f.ciphertext)
         XCTAssertNil(try Data(contentsOf: blob).range(of: f.plaintext))
-        try assertProtected(snapshot); try assertProtected(blob); try assertProtected(blob.deletingLastPathComponent())
+        try assertExcludedFromBackup(snapshot); try assertExcludedFromBackup(blob); try assertExcludedFromBackup(blob.deletingLastPathComponent())
         SyntheticURLProtocol.state.reset()
         let offlineReader = store()
         let offlineReport = try await offlineReader.load(access: f.access)
@@ -240,6 +270,36 @@ final class PromenadaRuntimeTests: XCTestCase {
         SyntheticURLProtocol.state.reset()
         await rejects { _ = try await reader.attachment(current.request, access: current.access) }
         XCTAssertFalse(FileManager.default.fileExists(atPath: blobURL(current).path))
+    }
+
+    func testCacheMetadataFailurePreservesPreviousSnapshot() async throws {
+        let old = Self.legacy, current = Self.parent
+        SyntheticURLProtocol.state.reset([
+            old.access.v2Endpoint.path: StubReply(status: 404),
+            old.access.endpoint.path: StubReply(chunks: [old.encrypted])
+        ])
+        let original = store(); _ = try await original.load(access: old.access)
+        let snapshot = root.appendingPathComponent("last-report.v2.enc.json")
+        XCTAssertEqual(try Data(contentsOf: snapshot), old.encrypted)
+        let failing = ReportStore(testDirectory: root, testBeforeCacheMetadata: { staging in
+            XCTAssertTrue(FileManager.default.fileExists(atPath: staging.path))
+            throw SyntheticFailure.metadata
+        }) { url, maximum in
+            try await BoundedReportDownload.testFetch(url, maximum: maximum, protocols: [SyntheticURLProtocol.self])
+        }
+        configure(current)
+        do {
+            _ = try await failing.load(access: current.access)
+            XCTFail("Injected metadata failure unexpectedly succeeded")
+        } catch SyntheticFailure.metadata {
+            // The exact staging fault reached the caller rather than an unrelated failure.
+        }
+        XCTAssertEqual(try Data(contentsOf: snapshot), old.encrypted)
+        let cached = try await original.cached(access: old.access)
+        XCTAssertEqual(cached, old.text)
+        let remaining = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        XCTAssertFalse(remaining.contains { $0.lastPathComponent.hasPrefix(".promenada-pending-") })
+        try assertExcludedFromBackup(snapshot)
     }
 
     func testCorruptEncryptedCacheIsRevalidatedAndReplaced() async throws {
@@ -319,12 +379,12 @@ final class PromenadaRuntimeTests: XCTestCase {
         model.testReceiveAttachment(["name": "../legacy-demo.txt", "base64": f.plaintext.base64EncodedString()])
         let legacyURL = try XCTUnwrap(model.attachment?.url)
         XCTAssertEqual(legacyURL.lastPathComponent, "legacy-demo.txt")
-        XCTAssertEqual(try Data(contentsOf: legacyURL), f.plaintext); try assertProtected(legacyURL)
+        XCTAssertEqual(try Data(contentsOf: legacyURL), f.plaintext); try assertExcludedFromBackup(legacyURL)
         model.testReceiveAttachment(f.body)
         await model.testPendingAttachment()?.value
         let modernURL = try XCTUnwrap(model.attachment?.url)
         XCTAssertEqual(modernURL.lastPathComponent, "synthetic-demo.txt")
-        XCTAssertEqual(try Data(contentsOf: modernURL), f.plaintext); try assertProtected(modernURL)
+        XCTAssertEqual(try Data(contentsOf: modernURL), f.plaintext); try assertExcludedFromBackup(modernURL)
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
         model.removeShare(); XCTAssertNil(model.attachment)
         XCTAssertFalse(FileManager.default.fileExists(atPath: modernURL.path))

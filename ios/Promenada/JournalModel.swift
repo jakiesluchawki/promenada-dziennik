@@ -240,8 +240,11 @@ final class JournalModel: NSObject, ObservableObject, WKScriptMessageHandler, WK
         if cleaned.isEmpty || [".", "..", "/"].contains(cleaned) { cleaned = "zalacznik" }
         var url = dir.appendingPathComponent(cleaned)
         try bytes.write(to: url, options: [.atomic, .completeFileProtection])
-        do { try url.setResourceValues(flags) }
-        catch { try? FileManager.default.removeItem(at: url); throw error }
+        do {
+            // Atomic replacement can create a new inode; explicitly protect the final file.
+            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: url.path)
+            try url.setResourceValues(flags)
+        } catch { try? FileManager.default.removeItem(at: url); throw error }
         sharingURL = url; attachment = ShareItem(url: url)
     }
     func removeShare() {

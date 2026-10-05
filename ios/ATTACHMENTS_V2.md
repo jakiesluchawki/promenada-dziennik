@@ -132,3 +132,50 @@ but does not exercise runtime behavior. The candidate CI contains the same two
 secret-free checks. It must not be run remotely until publishing/testing the
 larger candidate is authorized. Device/simulator UI and lifecycle testing remains
 a separate gate even when these two checks pass.
+
+### Simulator protection limitation
+
+On the locally tested Xcode 27.0 / iOS 26.5 Simulator, a standalone control
+file written with complete protection and explicitly updated with
+`FileManager.setAttributes` still returns no `protectionKey`. This happens
+with both direct and atomic writes, independently of the app.
+
+The runtime suite therefore separates backup exclusion, encrypted cache,
+rollback, offline behavior and share cleanup from protection metadata.
+`testCompleteProtectionMetadataOnReportBlobAndShares` probes a control file
+first and explicitly skips only on Simulator when that attribute is absent.
+On a physical device, missing or incorrect protection is a test failure.
+Do not report a skipped check as verified protection: physical-device checks
+of report, blob and temporary share protection, including locked-device
+behavior, remain a release gate.
+
+### Local synthetic UI tests and Keychain
+
+An unsigned Simulator app may fail Keychain operations with OSStatus -34018
+because it lacks an application identifier/access group. This is a test-build
+limitation; do not bypass Keychain in the application to make login tests pass.
+After explicit authorization for local ad hoc Simulator signing, use a fresh
+disposable iPhone, isolated DerivedData, and the following signing overrides:
+
+```sh
+xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus \
+  -configuration Debug -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,id=YOUR_DISPOSABLE_SIMULATOR_UDID' \
+  -derivedDataPath /tmp/mahbrus-synthetic-adhoc \
+  -parallel-testing-enabled NO -test-timeouts-enabled YES \
+  -default-test-execution-time-allowance 120 \
+  -maximum-test-execution-time-allowance 180 \
+  -only-testing:PromenadaRuntimeTests -only-testing:PromenadaUITests \
+  -skip-testing:PromenadaUITests/PromenadaUITests/testTabletLayout \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- \
+  CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
+```
+
+This signs only for local Simulator execution; it does not use an Apple account,
+distribution certificate or provisioning profile and does not authorize device
+signing or a release. The unsigned CI UI smoke job remains subject to the
+Keychain restriction; local ad hoc results must be reported separately.
+
+The encrypted UI fixtures are synthetic schema-1 reports. Their message IDs use
+the same `account:kind:id` namespace required by native validation and the
+collector; test data must not weaken those production checks.

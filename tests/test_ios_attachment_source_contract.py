@@ -71,6 +71,22 @@ class NativeAttachmentSourceContract(unittest.TestCase):
         self.assertIn('flags.isExcludedFromBackup = true', STORE)
         self.assertIn('legacy: true', STORE)
 
+    def test_final_cache_and_share_files_receive_explicit_protection(self):
+        cache = STORE.split('    private func protectedWrite(', 1)[1].split('    func attachment(', 1)[0]
+        staged_protection = 'setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: staging.path)'
+        self.assertLess(cache.index('try bytes.write(to: staging'), cache.index(staged_protection))
+        self.assertLess(cache.index(staged_protection), cache.index('replaceItemAt(destination'))
+        self.assertLess(cache.index('stagedURL.setResourceValues(flags)'), cache.index('replaceItemAt(destination'))
+        self.assertIn('options: [.usingNewMetadataOnly]', cache)
+        self.assertIn('moveItem(at: staging, to: destination)', cache)
+        self.assertIn('defer { try? FileManager.default.removeItem(at: staging) }', cache)
+        self.assertNotIn('removeItem(at: destination)', cache)
+        share = MODEL.split('    private func share(', 1)[1].split('    func removeShare()', 1)[0]
+        final_share_protection = 'setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: url.path)'
+        self.assertLess(share.index('try bytes.write(to: url'), share.index(final_share_protection))
+        self.assertLess(share.index(final_share_protection), share.index('sharingURL = url'))
+        self.assertIn('removeItem(at: url)', share)
+
     def test_share_is_cancelled_on_logout_and_preserves_legacy(self):
         self.assertIn('let base64 = body["base64"] as? String', MODEL)
         self.assertIn('bytes.count <= EncryptedAttachment.maximumPlaintext', MODEL)
