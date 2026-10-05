@@ -8,7 +8,26 @@ postacie: większego chłopca w oliwkowym stroju, mniejszego w niebieskim,
 jamnika, szkołę i szybowiec. Nie jest portretem na podstawie fotografii dzieci.
 Plik produkcyjny: `ios/Promenada/Assets.xcassets/AppIcon.appiconset/AppIcon.png`,
 1024 × 1024, bez kanału alpha; zaokrąglenie nadaje system iOS.
-Ostateczna korekta użytkownika: malutki jamnik na rękach młodszego chłopca.
+Ostateczne korekty użytkownika: mały, wyraźnie długi jamnik na rękach młodszego
+chłopca; starszy ma swobodną pozę i spodnie dzwony. Młodszy zachowany.
+
+Prompt końcowej korekty: Refine this exact felt iOS app icon with two precise
+changes requested by the owner. 1. Rabarbar must be unmistakably a DACHSHUND: a
+much longer, slender horizontal sausage-shaped torso, tiny short legs, long
+floppy ears and tapered dachshund snout. Keep the dog small and cradled in Wicio's
+arms, but make its body extend farther horizontally across and just beyond his
+arms, with the long back and rear distinctly visible. NOT a compact teddy bear
+puppy. 2. Kostek, the taller older boy in OLIVE on the left, should look relaxed
+and subtly nonchalant: olive bell-bottom/flared trousers, clearly wider from the
+knees down, a loose casual olive sweater, one hand casually tucked in a pocket,
+a slight easy lean/contrapposto and relaxed friendly self-assured smile. Stylish,
+effortless, still age-appropriate and warm. Preserve little Wicio in BLUE exactly:
+his beautiful face, hair, expression, proportions, clothing, height and gentle
+holding pose; only minimally adjust fingers to support the longer tiny dog.
+Preserve older boy's identity, hair and height. Preserve school, sailplane, pink
+full-bleed background, composition, lighting and handcrafted fine wool felt
+texture. No new accessories, no text, no borders. Exactly two boys and one small
+long dachshund held in little boy's arms. Square production app icon.
 
 Prompt korekty: Edit this exact app icon. Change ONLY the dachshund and the little
 boy's arms/pose needed to hold it. Remove the large dog sitting on the ground.
