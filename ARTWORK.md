@@ -8,6 +8,19 @@ postacie: większego chłopca w oliwkowym stroju, mniejszego w niebieskim,
 jamnika, szkołę i szybowiec. Nie jest portretem na podstawie fotografii dzieci.
 Plik produkcyjny: `ios/Promenada/Assets.xcassets/AppIcon.appiconset/AppIcon.png`,
 1024 × 1024, bez kanału alpha; zaokrąglenie nadaje system iOS.
+Ostateczna korekta użytkownika: malutki jamnik na rękach młodszego chłopca.
+
+Prompt korekty: Edit this exact app icon. Change ONLY the dachshund and the little
+boy's arms/pose needed to hold it. Remove the large dog sitting on the ground.
+Wicio, the SMALLER boy in BLUE, must hold a TINY miniature brown dachshund puppy
+gently in both arms against his chest, horizontally cradled. The tiny dachshund
+has a long little body, short paws and floppy ears; its body is smaller than the
+little boy's torso, clearly a small puppy that fits comfortably in his arms. No
+dog remains on the ground. Preserve the older taller boy in olive, the two boys'
+relative heights, their faces and hair, the school, the glider, the pink
+background, the fine felt texture, lighting, colours and square framing. Wicio's
+face must remain completely visible above the small puppy. Exactly two boys and
+one tiny dog. Opaque full-bleed square app icon, no text, no borders.
 
 Prompt: Create a finished square iOS app icon for a private family school journal
 called Mahbrus. Use the attached CHMURNIK icon ONLY as a visual style reference:
