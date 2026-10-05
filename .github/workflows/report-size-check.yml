@@ -4,6 +4,9 @@ on:
     branches: [fix/report-size-2026-10-05, fix/report-attachments-v2]
 permissions:
   contents: read
+concurrency:
+  group: synthetic-report-checks-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   synthetic-tests:
     runs-on: ubuntu-latest
@@ -46,11 +49,14 @@ jobs:
         id: simulator
         run: python3 ios/tests/select-test-simulator.py
       - name: Run synthetic store, cache, isolation and logout tests
+        timeout-minutes: 10
         run: >-
           xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
           -configuration Debug -sdk iphonesimulator
           -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
           -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 60
+          -maximum-test-execution-time-allowance 120
           -derivedDataPath "$RUNNER_TEMP/mahbrus-runtime-build"
           -resultBundlePath "$RUNNER_TEMP/mahbrus-runtime-results.xcresult"
           -only-testing:PromenadaRuntimeTests CODE_SIGNING_ALLOWED=NO
@@ -58,11 +64,14 @@ jobs:
         if: always()
         run: python3 ios/tests/report-runtime-diagnostics.py
       - name: Run synthetic legacy login, offline, logout and student rejection UI smoke
+        timeout-minutes: 10
         run: >-
           xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
           -configuration Debug -sdk iphonesimulator
           -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
           -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 60
+          -maximum-test-execution-time-allowance 120
           -derivedDataPath "$RUNNER_TEMP/mahbrus-runtime-build"
           -resultBundlePath "$RUNNER_TEMP/mahbrus-legacy-ui-results.xcresult"
           -only-testing:PromenadaUITests/PromenadaUITests/testRememberedAccessOfflineAndLogout
