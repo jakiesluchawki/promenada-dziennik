@@ -13,8 +13,13 @@ PHASES = frozenset({
 
 
 class ReportError(RuntimeError):
-    def __init__(self, code):
+    def __init__(self, code, metrics=None):
         self.code = code if code in ERROR_CODES else "unexpected_error"
+        # Only fixed, content-free counters may enter public diagnostics.
+        self.metrics = {key: value for key, value in (metrics or {}).items()
+                        if self.code == "report_too_large"
+                        and key in {"encrypted_bytes", "plaintext_bytes", "attachment_bytes"}
+                        and type(value) is int and 0 <= value <= 10**12}
         super().__init__(self.code)
 
 
@@ -43,4 +48,7 @@ class Diagnostics:
         self.phase = phase if phase in PHASES else "initialise"
 
     def failure(self, error):
-        return f"phase={self.phase} code={error_code(error)}"
+        result = f"phase={self.phase} code={error_code(error)}"
+        if isinstance(error, ReportError):
+            result += "".join(f" {key}={value}" for key, value in sorted(error.metrics.items()))
+        return result
