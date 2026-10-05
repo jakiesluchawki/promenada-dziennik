@@ -171,10 +171,12 @@ xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus \
   CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
 ```
 
-This signs only for local Simulator execution; it does not use an Apple account,
-distribution certificate or provisioning profile and does not authorize device
-signing or a release. The unsigned CI UI smoke job remains subject to the
-Keychain restriction; local ad hoc results must be reported separately.
+These overrides sign only for Simulator execution; they do not use an Apple
+account, certificate or provisioning profile and do not authorize device signing
+or a release. The CI UI smoke step uses the same ad hoc overrides and its own
+DerivedData directory, separate from the unsigned runtime tests. The generic
+Simulator build and runtime tests remain unsigned. Local results and remote CI
+results must still be reported separately.
 
 The encrypted UI fixtures are synthetic schema-1 reports. Their message IDs use
 the same `account:kind:id` namespace required by native validation and the

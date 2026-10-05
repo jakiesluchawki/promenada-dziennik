@@ -63,7 +63,9 @@ jobs:
       - name: Report bounded synthetic runtime failure diagnostics
         if: always()
         run: python3 ios/tests/report-runtime-diagnostics.py
-      - name: Run synthetic legacy login, offline, logout and student rejection UI smoke
+      # Simulator-only ad hoc signing provides the app identity required by
+      # Keychain. No Apple account, certificate, profile or signing secret.
+      - name: Run ad hoc signed Simulator legacy login, offline, logout and student rejection UI smoke
         timeout-minutes: 10
         run: >-
           xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
@@ -72,8 +74,9 @@ jobs:
           -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
           -test-timeouts-enabled YES -default-test-execution-time-allowance 60
           -maximum-test-execution-time-allowance 120
-          -derivedDataPath "$RUNNER_TEMP/mahbrus-runtime-build"
+          -derivedDataPath "$RUNNER_TEMP/mahbrus-legacy-ui-build"
           -resultBundlePath "$RUNNER_TEMP/mahbrus-legacy-ui-results.xcresult"
           -only-testing:PromenadaUITests/PromenadaUITests/testRememberedAccessOfflineAndLogout
           -only-testing:PromenadaUITests/PromenadaUITests/testStudentRejectsFamilyReportEvenWithItsPassword
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=-
+          CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
