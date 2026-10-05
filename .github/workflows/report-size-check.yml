@@ -23,7 +23,9 @@ jobs:
       - run: python -m compileall -q scripts tests
       - run: node --check app.js && node --check ios/Promenada/Web/app.js
   native-helpers-and-build:
-    runs-on: macos-latest
+    # Standard Intel pool avoids observed arm64 hosted-runner capacity failures.
+    # Keep the same checks; local release validation also covers Apple Silicon.
+    runs-on: macos-26-intel
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -39,7 +41,7 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/mahbrus-v2-build"
           CODE_SIGNING_ALLOWED=NO build
   simulator-runtime:
-    runs-on: macos-latest
+    runs-on: macos-26-intel
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
