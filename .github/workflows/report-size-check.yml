@@ -1,0 +1,90 @@
+name: Report size candidate checks
+on:
+  push:
+    branches: [fix/report-size-2026-10-05, fix/report-attachments-v2]
+permissions:
+  contents: read
+concurrency:
+  # Separate the Intel pool from an older arm64 run stuck during cancellation.
+  group: synthetic-report-checks-intel-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check -q -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q scripts tests
+      - run: node --check app.js && node --check ios/Promenada/Web/app.js
+  native-helpers-and-build:
+    # Standard Intel pool avoids observed arm64 hosted-runner capacity failures.
+    # Keep the same checks; local release validation also covers Apple Silicon.
+    runs-on: macos-26-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Run synthetic native crypto and bridge vectors
+        run: sh ios/tests/run-attachment-contract-tests.sh
+      - name: Build unsigned iOS simulator app
+        run: >-
+          xcodebuild -project ios/Promenada.xcodeproj -scheme Mahbrus
+          -configuration Debug -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/mahbrus-v2-build"
+          CODE_SIGNING_ALLOWED=NO build
+  simulator-runtime:
+    runs-on: macos-26-intel
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Select an available iPhone Simulator
+        id: simulator
+        run: python3 ios/tests/select-test-simulator.py
+      - name: Run synthetic store, cache, isolation and logout tests
+        timeout-minutes: 10
+        run: >-
+          xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
+          -configuration Debug -sdk iphonesimulator
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
+          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 60
+          -maximum-test-execution-time-allowance 120
+          -derivedDataPath "$RUNNER_TEMP/mahbrus-runtime-build"
+          -resultBundlePath "$RUNNER_TEMP/mahbrus-runtime-results.xcresult"
+          -only-testing:PromenadaRuntimeTests CODE_SIGNING_ALLOWED=NO
+      - name: Report bounded synthetic runtime failure diagnostics
+        if: always()
+        run: python3 ios/tests/report-runtime-diagnostics.py
+      # Simulator-only ad hoc signing provides the app identity required by
+      # Keychain. No Apple account, certificate, profile or signing secret.
+      - name: Run ad hoc signed Simulator legacy login, offline, logout and student rejection UI smoke
+        # The Intel hosted runner needs about six minutes to build and start
+        # this runner before the three UI scenarios begin. Keep bounded test
+        # execution below; allow preparation and all scenarios to finish.
+        timeout-minutes: 20
+        run: >-
+          xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
+          -configuration Debug -sdk iphonesimulator
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
+          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 180
+          -maximum-test-execution-time-allowance 240
+          -collect-test-diagnostics never
+          -derivedDataPath "$RUNNER_TEMP/mahbrus-legacy-ui-build"
+          -resultBundlePath "$RUNNER_TEMP/mahbrus-legacy-ui-results.xcresult"
+          -only-testing:PromenadaUITests/PromenadaUITests/testRememberedAccessOfflineAndLogout
+          -only-testing:PromenadaUITests/PromenadaUITests/testChildViewsStaySeparate
+          -only-testing:PromenadaUITests/PromenadaUITests/testStudentRejectsFamilyReportEvenWithItsPassword
+          CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=-
+          CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=

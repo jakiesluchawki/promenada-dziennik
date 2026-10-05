@@ -44,3 +44,17 @@ main{min-width:0;outline:none}.section-hero{min-height:84px;padding:12px 22px 14
 @media(min-width:701px){nav{background:oklch(98% .014 65/.94);border:1px solid var(--line);border-radius:12px;padding:8px;margin-top:14px}.snapshot-label{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 9px}.compare-link{background:var(--surface);border-radius:8px;padding:0 10px}}
 
 .sync{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted)}.sync-status{max-width:1220px;margin:0 auto;padding:0 28px 12px;font-size:13px;line-height:1.5;color:var(--muted)}.sync-status:empty{display:none}@media(max-width:700px){.sync{justify-content:space-between;gap:8px;padding:4px 2px 0;font-size:11px}.sync .quiet{font-size:12px;padding:8px 10px;min-height:44px}.sync-status{padding:0 15px 10px}}
+
+.child-context{display:block;font-size:14px;font-weight:700;margin-bottom:5px;color:var(--ink)}
+
+/* Child identity stays separate from urgency/new-message colours. */
+[data-child-tone="olive"]{--child-accent:#52602d;--child-soft:#edf0df;--child-line:#9fae79}
+[data-child-tone="blue"]{--child-accent:#285e83;--child-soft:#e7f0f7;--child-line:#91b6d1}
+#children{gap:8px}
+#children button{border:1px solid transparent;font-weight:700;color:var(--child-accent)}
+#children button::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:7px}
+#children button[aria-pressed=true]{background:var(--child-accent);color:#fff;border-color:var(--child-accent);box-shadow:0 2px 4px #00000012}
+#journal .section-hero{border-inline-start:4px solid var(--child-accent);background:linear-gradient(90deg,var(--child-soft) 5%,transparent 180%),url("./assets/paper-scene.webp") center 48%/cover}
+#journal .child-context{color:var(--child-accent)}
+#journal .child-tag{color:var(--child-accent)}
+#journal nav button[aria-current=page]{background:var(--child-soft);color:var(--child-accent)}

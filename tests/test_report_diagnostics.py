@@ -198,7 +198,7 @@ class CloudRunDiagnostics(unittest.TestCase):
         with patch.object(publisher, 'MAX_REPORT_BYTES', 1):
             result, logs = self.run_cloud(self.collect)
         self.assertEqual(result, 1)
-        self.assertIn('phase=write_ciphertext code=report_too_large', logs)
+        self.assertIn('phase=decrypt_previous code=report_too_large', logs)
         self.assertEqual(self.target.read_text(), self.original)
         self.assertFalse(self.output.exists())
         self.stage.assert_not_called()

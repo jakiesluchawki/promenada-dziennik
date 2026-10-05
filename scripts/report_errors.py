@@ -4,17 +4,24 @@ from cryptography.exceptions import InvalidTag
 
 ERROR_CODES = frozenset({
     "digest_unknown_source", "digest_source_scope", "unreviewed_public_file", "plaintext_public_file", "report_too_large",
+    "attachment_invalid", "attachment_scope", "attachment_too_large", "attachment_unavailable", "attachment_integrity",
 })
 PHASES = frozenset({
     "initialise", "prepare_workspace", "decrypt_previous", "prepare_snapshot",
     "collect", "reconcile_sources", "load_report", "encrypt_report", "verify_encryption", "write_ciphertext", "audit_public_files",
     "prepare_state", "check_collection", "stage_site", "write_health", "cleanup",
+    "externalize_attachments", "hydrate_attachments",
 })
 
 
 class ReportError(RuntimeError):
-    def __init__(self, code):
+    def __init__(self, code, metrics=None):
         self.code = code if code in ERROR_CODES else "unexpected_error"
+        # Only fixed, content-free counters may enter public diagnostics.
+        self.metrics = {key: value for key, value in (metrics or {}).items()
+                        if self.code == "report_too_large"
+                        and key in {"encrypted_bytes", "plaintext_bytes", "attachment_bytes"}
+                        and type(value) is int and 0 <= value <= 10**12}
         super().__init__(self.code)
 
 
@@ -43,4 +50,7 @@ class Diagnostics:
         self.phase = phase if phase in PHASES else "initialise"
 
     def failure(self, error):
-        return f"phase={self.phase} code={error_code(error)}"
+        result = f"phase={self.phase} code={error_code(error)}"
+        if isinstance(error, ReportError):
+            result += "".join(f" {key}={value}" for key, value in sorted(error.metrics.items()))
+        return result

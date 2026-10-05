@@ -182,13 +182,18 @@ def collect_account(key, previous):
                 href=urljoin(url,a["href"])
                 if urlparse(href).hostname=="synergia.librus.pl" and any(t in href.lower() for t in ("pobierz","download","zalacznik")):
                     attachments.append({"name":a.get_text(" ",strip=True) or "Załącznik","url":href})
+            downloaded=set()
             for el in body.select("[onclick]"):
                 js=el.get("onclick","").replace("\\/", "/")
                 match=re.search(r"(/wiadomosci/pobierz_zalacznik/\d+/\d+)",js)
                 if not match:continue
                 row=el.find_parent("tr")
                 filename=row.find("td").get_text(" ",strip=True) if row else "Załącznik"
-                try: attachments.append(download_attachment(s,"https://synergia.librus.pl"+match.group(1),filename))
+                download_key=(match.group(1),filename)
+                if download_key in downloaded:continue
+                try:
+                    attachments.append(download_attachment(s,"https://synergia.librus.pl"+match.group(1),filename))
+                    downloaded.add(download_key)
                 except Exception as e: attachments.append({"name":filename,"error":str(e),"url":url})
             messages.append({"attachment_version":2,"id":mid,"child":key,"kind":"message","title":meta.get("Temat",links[-1].get_text(" ",strip=True)),"sender":meta.get("Nadawca",links[0].get_text(" ",strip=True)),"date":meta.get("Wysłano",""),"text":text_clean(content),"url":url,"attachments":attachments})
             time.sleep(.15)

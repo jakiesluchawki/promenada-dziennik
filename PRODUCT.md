@@ -23,6 +23,8 @@ Rozdrobnione, rozległe widoki Librusa; konieczność ponownego wpisywania hase�
 ## Design Principles
 
 - Priorytetem są nowe komunikaty, terminy i plan.
+- Rodzic ogląda zawsze jedno dziecko: przełącznik Kostek / Witek, bez zbiorczego widoku „Oboje” / „Wszystko”. Nagłówek każdego działu wskazuje dziecko; wybór pozostaje przy zmianie działu i odświeżeniu raportu.
+- Kolor identyfikuje dziecko: Kostek — oliwka, Witek — niebieski. Imię i wybrany stan przycisku zawsze towarzyszą kolorowi; barwy pilności pozostają niezależne.
 - Dostęp ucznia obejmuje tylko jego źródło danych.
 - Wyraźnie odróżniaj datę raportu od stanu pobierania.
 - Zachowaj wspólny interfejs i natywne, przewidywalne formularze.

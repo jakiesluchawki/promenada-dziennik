@@ -21,8 +21,9 @@ def main(on_phase=lambda phase: None):
         try:
             on_phase("decrypt_previous")
             password = collector.secret("site-password")
-            envelope = json.loads((ROOT / "report.enc.json").read_text())
-            previous = publisher.decrypt(envelope, password)
+            previous = publisher.load_current_report(ROOT, password, audience="parent", principal="parent")
+            on_phase("hydrate_attachments")
+            previous = publisher.attachments.hydrate(previous, ROOT)
             on_phase("prepare_snapshot")
             old_digest = previous.pop("digest", {"actions": [], "observations": []})
             # Observations are regenerated from attendance and must not accumulate.
