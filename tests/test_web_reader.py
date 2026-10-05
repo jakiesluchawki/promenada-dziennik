@@ -9,7 +9,7 @@ class WebReader(unittest.TestCase):
     @unittest.skipUnless(shutil.which('node'), 'Node.js is required for browser-reader checks')
     def test_scoped_attachment_protocol_and_interrupted_ui(self):
         root = pathlib.Path(__file__).resolve().parents[1]
-        result = subprocess.run(['node', '--test', 'tests/test_web_attachments.cjs'],
+        result = subprocess.run(['node', '--test', 'tests/test_web_attachments.cjs', 'tests/test_child_views.cjs'],
                                 cwd=root, capture_output=True, text=True, timeout=90)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

@@ -32,7 +32,7 @@ window.promenadaReceive=(report,status,saved,automatic=false)=>{
  $("sync-status").textContent=status||(before?(before===data.collected_at?"Masz najnowszy opublikowany raport.":"Wczytano nowszy raport."):"");
 };
 window.promenadaClear=()=>{
- releaseAttachments();data=null;reviewState={read:{},done:{},priority:{}};selected="all";current="overview";query="";
+ releaseAttachments();data=null;reviewState={read:{},done:{},priority:{}};selected=null;current="overview";query="";
  $("main").replaceChildren();$("journal").hidden=true;
 };
 $("lock").addEventListener("click",()=>nativeSend("forget"));

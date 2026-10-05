@@ -7,11 +7,11 @@ function releaseAttachments(){
  for(const request of attachmentRequests)request.abort();attachmentRequests.clear();
  for(const url of attachmentUrls)URL.revokeObjectURL(url);attachmentUrls.clear();
 }
-let data=null, keyMaterial=null, selected="all", current="overview", query="", activity=Date.now();
+let data=null, keyMaterial=null, selected=null, current="overview", query="", activity=Date.now();
 const $=id=>document.getElementById(id);
 const sections=[
 ["overview","Przegląd","Szkoła w jednym miejscu.","Najważniejsze sprawy, nadchodzące terminy i pełny obraz szkolnego tygodnia."],
-["messages","Wiadomości","Słowo ze szkoły.","Wspólna skrzynka. Pełna treść wiadomości i załączniki, uporządkowane od najnowszych."],
+["messages","Wiadomości","Słowo ze szkoły.","Skrzynka wybranego dziecka. Pełna treść wiadomości i załączniki, uporządkowane od najnowszych."],
 ["announcements","Ogłoszenia","Na szkolnej tablicy.","Komunikaty szkół i nauczycieli. Każdy z datą, autorem i wskazaniem dziecka."],
 ["timetable","Plan lekcji","Rytm tygodnia.","Godziny od pierwszej do ostatniej lekcji. Rozwiń dzień, aby zobaczyć przedmioty, sale i zmiany."],
 ["dates","Terminy","Warto pamiętać.","Terminarz z Librusa oraz daty odczytane z wiadomości. Źródło jest zawsze pod ręką."],
@@ -23,7 +23,7 @@ const sections=[
 ];
 
 let reviewState={read:{},done:{},priority:{}}, attentionFilter="all";
-try{const saved=JSON.parse(localStorage.getItem("promenada-review-v1")||"null");if(saved&&typeof saved==="object")reviewState={read:saved.read||{},done:saved.done||{},priority:saved.priority||{}}}catch{}
+
 function saveReview(){try{localStorage.setItem("promenada-review-v1",JSON.stringify(reviewState))}catch{}}
 function isNew(item){return Boolean(item?.revision&&!reviewState.read[item.revision])}
 function isDone(a){return Boolean(a.id&&reviewState.done[a.id]===a.revision)}
@@ -70,7 +70,12 @@ function sectionReview(sec){const box=el("div","section-review");if(isNew(sec)){
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function button(label,fn,cls=""){const n=el("button",cls,label);n.type="button";n.addEventListener("click",fn);return n}
 function name(key){return data?.accounts[key]?.name||""}
-function chosen(){return Object.values(data.accounts).filter(a=>selected==="all"||a.child===selected)}
+function chosen(){return Object.values(data.accounts).filter(a=>a.child===selected)}
+function selectChild(id){
+ if(!Object.values(data.accounts).some(a=>a.child===id))return;
+ selected=id;query="";attentionFilter="all";documentFilter="all";
+ render();$("main").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"});
+}
 function datePL(s,options={day:"numeric",month:"long"}){if(!s)return "";const d=new Date(s.length===10?s+"T12:00:00":s.replace(" ","T"));return Number.isNaN(+d)?s:new Intl.DateTimeFormat("pl-PL",{timeZone:"Europe/Warsaw",...options}).format(d)}
 function dayISO(){return new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Warsaw"}).format(new Date())}
 function safeLink(url,label){const a=el("a","source-link",label);try{const u=new URL(url);if(!["https:","http:"].includes(u.protocol))return el("span","muted",label);a.href=u.href;a.target="_blank";a.rel="noopener noreferrer";return a}catch{return el("span","muted",label)}}
@@ -80,11 +85,11 @@ function heading(title,note){const h=el("div","section-heading");h.append(el("h2
 function panel(title,note){const p=el("section","section-body");if(title)p.append(heading(title,note));return p}
 function raw(section){const d=el("details","source-raw");d.append(el("summary","","Pełny odczyt tej części Librusa"),el("div","raw-text",section.text||"Brak treści."),safeLink(section.url,"Otwórz w Librusie ↗"));return d}
 function navigate(id){current=id;query="";attentionFilter="all";documentFilter="all";render();$("main").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"})}
-function getDocuments(){return Object.values(data.accounts).flatMap(a=>[...(a.messages||[]),...(a.announcements||[])])}
+function getDocuments(){return chosen().flatMap(a=>[...(a.messages||[]),...(a.announcements||[])])}
 function openSource(id,fallback){const m=getDocuments().find(m=>m.id===id);if(m){current=m.kind==="announcement"?"announcements":"messages";selected=m.child;query="";render();const d=Array.from(document.querySelectorAll(".document")).find(x=>x.dataset.id===id);if(d){d.open=true;d.scrollIntoView({block:"start",behavior:"smooth"})}}else navigate(fallback||"dates")}
 
 let documentFilter="all";
-const compactTitles={overview:["Sprawy na teraz","Najważniejsze informacje, w krótszym widoku."],messages:["Wiadomości","Pełna treść po rozwinięciu wiadomości."],announcements:["Ogłoszenia","Komunikaty z obu szkół."],timetable:["Plan lekcji","Dotknij godzin, aby zobaczyć lekcje."],dates:["Terminy","Daty z wiadomości i terminarza."],grades:["Oceny","Bieżące oceny i opisy postępów."],attendance:["Frekwencja","Nieobecności, zwolnienia i spóźnienia."],notes:["Uwagi","Wpisy i spostrzeżenia nauczycieli."],homework:["Zadania","Prace domowe, lektury i przygotowania."],achievements:["Osiągnięcia","Sukcesy zapisane przez szkołę."],more:["Pozostałe działy","Wszystkie szkolne sprawy są pod ręką."]};
+const compactTitles={overview:["Sprawy na teraz","Najważniejsze informacje, w krótszym widoku."],messages:["Wiadomości","Pełna treść po rozwinięciu wiadomości."],announcements:["Ogłoszenia","Komunikaty szkoły wybranego dziecka."],timetable:["Plan lekcji","Dotknij godzin, aby zobaczyć lekcje."],dates:["Terminy","Daty z wiadomości i terminarza."],grades:["Oceny","Bieżące oceny i opisy postępów."],attendance:["Frekwencja","Nieobecności, zwolnienia i spóźnienia."],notes:["Uwagi","Wpisy i spostrzeżenia nauczycieli."],homework:["Zadania","Prace domowe, lektury i przygotowania."],achievements:["Osiągnięcia","Sukcesy zapisane przez szkołę."],more:["Pozostałe działy","Wszystkie szkolne sprawy są pod ręką."]};
 const primarySections=["overview","messages","timetable","grades"];
 function uiIcon(key){
  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
@@ -104,7 +109,14 @@ function uiIcon(key){
  };
  svg.innerHTML=paths[key]||paths.more;return svg;
 }
-function childTag(key){return el("span","child-tag",name(key))}
+function childTone(key){
+ const identity=(key+" "+name(key)).toLocaleLowerCase("pl");
+ if(/\b(witek|witold)\b/.test(identity))return "blue";
+ if(/\b(kostek|konstanty)\b/.test(identity))return "olive";
+ // Keep a stable colour for other/synthetic accounts, independent of report order.
+ return Array.from(String(key)).reduce((sum,c)=>sum+c.codePointAt(0),0)%2?"blue":"olive";
+}
+function childTag(key){const tag=el("span","child-tag",name(key));tag.dataset.childTone=childTone(key);return tag}
 function shortDate(s){return datePL(s,{day:"numeric",month:"short"})}
 function lessonCount(n){return n+" "+(n===1?"lekcja":n%10>=2&&n%10<=4&&!(n%100>=12&&n%100<=14)?"lekcje":"lekcji")}
 function lessonSpan(day){
@@ -134,7 +146,7 @@ function missedCollection(){
  const now=parts(new Date()),today=now.year+"-"+now.month+"-"+now.day,minute=+now.hour*60+(+now.minute);
  // Allow the bounded retries to finish before showing a missed-window warning.
  const target=minute>=1110?"18:00":minute>=420?"06:30":null;
- return Object.values(data.accounts).some(a=>{
+ return chosen().some(a=>{
   const timestamp=new Date(a.checked_at||data.collected_at);
   if(!Number.isFinite(timestamp.getTime()))return true;
   const read=parts(timestamp),readAt=read.year+"-"+read.month+"-"+read.day+"T"+read.hour+":"+read.minute;
@@ -143,7 +155,7 @@ function missedCollection(){
 }
 function renderHealth(){
  $("health").replaceChildren();
- const bad=Object.values(data.accounts).filter(a=>a.status!=="ok");
+ const bad=chosen().filter(a=>a.status!=="ok");
  if(bad.length){const n=el("div","notice");n.append(el("p","","Nie udało się odświeżyć konta: "+bad.map(a=>a.name).join(", ")+". Poniżej ostatni poprawny odczyt."));$("health").append(n)}
  if(missedCollection()){$("health").append(el("div","notice","Brakuje aktualnego raportu z ostatniej pory odczytu. Wyświetlane dane są starsze."))}
 }
@@ -153,7 +165,9 @@ function render(){
  releaseAttachments();
  $("children").replaceChildren();
  const accounts=Object.values(data.accounts);
- (accounts.length>1?[["all","Oboje"],...accounts.map(a=>[a.child,a.name])]:accounts.map(a=>[a.child,a.name])).forEach(([id,label])=>{const b=button(label,()=>{selected=id;query="";render()});b.setAttribute("aria-pressed",String(selected===id));$("children").append(b)});
+ if(!accounts.some(a=>a.child===selected))selected=accounts[0]?.child??null;
+ $("journal").dataset.childTone=childTone(selected);
+ accounts.map(a=>[a.child,a.name]).forEach(([id,label])=>{const b=button(label,()=>selectChild(id));b.dataset.childTone=childTone(id);b.setAttribute("aria-label","Pokaż dziennik: "+label);b.setAttribute("aria-pressed",String(selected===id));$("children").append(b)});
  $("children").hidden=accounts.length===1;
  $("updated").textContent="Odczyt: "+datePL(data.collected_at,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
  renderHealth();
@@ -166,12 +180,12 @@ function render(){
  });
  const more=button("",()=>navigate("more"),"nav-more");more.setAttribute("aria-label","Więcej działów");more.append(uiIcon("more"),el("span","nav-label","Więcej"));const otherNew=sections.filter(([id])=>!primarySections.includes(id)).reduce((total,[id])=>total+newCount(id),0);if(otherNew)more.append(el("span","nav-count",String(otherNew)));if(!primarySections.includes(current))more.setAttribute("aria-current","page");$("nav").append(more);
  const spec=compactTitles[current]||compactTitles.overview,hero=el("header","section-hero");
- hero.append(el("h1","",spec[0]),el("p","",spec[1]));$("main").replaceChildren(hero);
+ hero.append(el("span","child-context","Dziennik: "+name(selected)),el("h1","",spec[0]),el("p","",spec[1]));$("main").replaceChildren(hero);
  ({overview,documents,messages:documents,announcements:documents,timetable,dates,grades,attendance,notes:simple,homework,achievements:simple,more:moreSections}[current])();
  document.querySelectorAll("details[data-id]").forEach(d=>{if(expanded.has(d.dataset.id))d.open=true});
 }
 
-function allActions(){return (data.digest?.actions||[]).filter(x=>selected==="all"||x.child===selected)}
+function allActions(){return (data.digest?.actions||[]).filter(x=>x.child===selected)}
 function actionRow(a){
  const row=el("details","task-row");row.dataset.id=a.id||a.source_id||a.title;
  const sum=el("summary"),date=el("span","task-when"+(!a.date?" undated":""));
@@ -197,7 +211,7 @@ function overview(){
  if(!fresh.length)inbox.append(empty("Wszystkie treści są przejrzane."));
  fresh.slice(0,4).forEach(m=>{const b=button("",()=>openSource(m.id),"fresh-row"),meta=el("div","row-meta");meta.append(childTag(m.child),el("span","doc-date",shortDate(m.date)));b.append(meta,el("strong","",m.title));inbox.append(b)});
  inbox.append(button("Wszystkie wiadomości ↗",()=>navigate("messages"),"text-button all-messages"));aside.append(inbox);
- const notes=(data.digest?.observations||[]).filter(a=>selected==="all"||a.child===selected);
+ const notes=(data.digest?.observations||[]).filter(a=>a.child===selected);
  if(notes.length){const notesPanel=panel("Warto sprawdzić");notes.forEach(a=>notesPanel.append(actionRow(a)));aside.append(notesPanel)}
  grid.append(p,aside);$("main").append(grid);
 }
@@ -476,7 +490,7 @@ window.promenadaReceive=(report,status,saved,automatic=false)=>{
  $("sync-status").textContent=status||(before?(before===data.collected_at?"Masz najnowszy opublikowany raport.":"Wczytano nowszy raport."):"");
 };
 window.promenadaClear=()=>{
- releaseAttachments();data=null;reviewState={read:{},done:{},priority:{}};selected="all";current="overview";query="";
+ releaseAttachments();data=null;reviewState={read:{},done:{},priority:{}};selected=null;current="overview";query="";
  $("main").replaceChildren();$("journal").hidden=true;
 };
 $("lock").addEventListener("click",()=>nativeSend("forget"));

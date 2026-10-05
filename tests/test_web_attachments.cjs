@@ -184,7 +184,11 @@ test('bundled native bridge sends exact scoped reference and preserves legacy ro
  const button=context.nativeAttachment(f.file,f.message,0);button.click();assert.equal(nativeMessages.length,1);
  const sent=nativeMessages[0];assert.deepEqual(JSON.parse(JSON.stringify(sent)),{action:'attachment',name:f.file.name,accountKey:f.scope.accountKey,source:'messages',messageId:f.scope.messageId,attachmentIndex:0,ref:f.ref,scope:{audience:'parent',principal:'parent'}});
  context.nativeAttachment({name:'old.bin',base64:'AA==',size:1}).click();assert.equal(nativeMessages[1].base64,'AA==');assert.equal(nativeMessages[1].ref,undefined);
- assert.equal(fs.readFileSync(path.join(root,'ios/Promenada/Web/app.js'),'utf8'),app.slice(0,app.indexOf('function fromB64('))+bridge);
+ let bundled=app.slice(0,app.indexOf('function fromB64('));
+ // sync-web.py deliberately removes browser-local persistence initialization.
+ const persistenceStart=bundled.indexOf('try{const saved=JSON.parse(localStorage');
+ bundled=bundled.slice(0,persistenceStart)+bundled.slice(bundled.indexOf('\nfunction saveReview()',persistenceStart));
+ assert.equal(fs.readFileSync(path.join(root,'ios/Promenada/Web/app.js'),'utf8'),bundled+bridge);
 });
 
 test('padding buckets hide exact lengths while preserving empty and maximum-size files',async()=>{

@@ -19,6 +19,7 @@ final class PromenadaUITests: XCTestCase {
         let plan = app.webViews.buttons["Plan lekcji"]
         XCTAssertTrue(plan.waitForExistence(timeout: 25), app.debugDescription)
         XCTAssertFalse(input.exists)
+        app.webViews.descendants(matching: .any).matching(identifier: "Pokaż dziennik: Nela").firstMatch.tap()
         plan.tap()
         XCTAssertTrue(app.webViews.staticTexts["Cały tydzień"].waitForExistence(timeout: 5))
         let screenshot = XCTAttachment(screenshot: app.screenshot())
@@ -42,6 +43,7 @@ final class PromenadaUITests: XCTestCase {
         XCTAssertTrue(app.webViews.buttons["Plan lekcji"].waitForExistence(timeout: 25), app.debugDescription)
         XCTAssertFalse(app.secureTextFields["journal-password"].exists)
         XCTAssertTrue(app.webViews.staticTexts["Bez połączenia z serwerem. Pokazuję ostatni zapisany raport."].waitForExistence(timeout: 10))
+        app.webViews.descendants(matching: .any).matching(identifier: "Pokaż dziennik: Nela").firstMatch.tap()
         app.webViews.buttons["Wiadomości"].tap()
         app.webViews.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Piątkowa wyprawa do planetarium")).firstMatch.tap()
         XCTAssertTrue(app.webViews.buttons["Przeczytane"].firstMatch.waitForExistence(timeout: 5))
@@ -54,6 +56,35 @@ final class PromenadaUITests: XCTestCase {
         XCTAssertTrue(app.secureTextFields["journal-password"].waitForExistence(timeout: 15))
     }
 
+    func testChildViewsStaySeparate() {
+        let app = XCUIApplication()
+        app.launchEnvironment["PROMENADA_TEST_REPORT"] = fixture
+        app.launchArguments = ["--reset-test-access"]
+        app.launch()
+        let input = app.secureTextFields["journal-password"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        input.tap(); input.typeText("test-only-password"); app.buttons["journal-unlock"].tap()
+        XCTAssertTrue(app.webViews.descendants(matching: .any).matching(identifier: "Pokaż dziennik: Leon").firstMatch.waitForExistence(timeout: 25))
+        XCTAssertFalse(app.webViews.buttons["Oboje"].exists)
+        XCTAssertTrue(app.webViews.staticTexts["Dziennik: Leon"].exists)
+        app.webViews.buttons["Wiadomości"].tap()
+        XCTAssertTrue(app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Jesienny projekt z przyrody")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Piątkowa wyprawa do planetarium")).firstMatch.exists)
+        app.webViews.descendants(matching: .any).matching(identifier: "Pokaż dziennik: Nela").firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Dziennik: Nela"].exists)
+        XCTAssertTrue(app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Piątkowa wyprawa do planetarium")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Jesienny projekt z przyrody")).firstMatch.exists)
+        app.webViews.buttons["Wczytaj raport"].tap()
+        XCTAssertTrue(app.webViews.staticTexts["Masz najnowszy opublikowany raport."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.webViews.staticTexts["Dziennik: Nela"].exists)
+        app.webViews.buttons["Plan lekcji"].tap()
+        XCTAssertTrue(app.webViews.staticTexts["Dziennik: Nela"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Osobny dziennik dziecka"; shot.lifetime = .keepAlways; add(shot)
+        app.webViews.descendants(matching: .any).matching(identifier: "Pokaż dziennik: Leon").firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Dziennik: Leon"].exists)
+    }
+
     func testSectionsAndAttachment() {
         let app = XCUIApplication()
         app.launchEnvironment["PROMENADA_TEST_REPORT"] = fixture
@@ -64,6 +95,7 @@ final class PromenadaUITests: XCTestCase {
         let gate = XCTAttachment(screenshot:app.screenshot());gate.name="Mahbrus – pierwszy dostęp";gate.lifetime = .keepAlways;add(gate)
         input.tap();input.typeText("test-only-password");app.buttons["journal-unlock"].tap()
         XCTAssertTrue(app.webViews.buttons["Plan lekcji"].waitForExistence(timeout:25))
+        app.webViews.descendants(matching: .any).matching(identifier: "Pokaż dziennik: Nela").firstMatch.tap()
         let overview=XCTAttachment(screenshot:app.screenshot());overview.name="Mahbrus – sprawy";overview.lifetime = .keepAlways;add(overview)
         app.webViews.buttons["Oceny"].tap()
         XCTAssertTrue(app.webViews.staticTexts["Matematyka"].firstMatch.waitForExistence(timeout:5))
@@ -147,6 +179,7 @@ final class PromenadaUITests: XCTestCase {
         app.secureTextFields["journal-password"].typeText("test-only-password")
         app.buttons["journal-unlock"].tap()
         XCTAssertTrue(app.webViews.buttons["Wiadomości"].waitForExistence(timeout: 25))
+        app.webViews.descendants(matching: .any).matching(identifier: "Pokaż dziennik: Nela").firstMatch.tap()
         app.webViews.buttons["Wiadomości"].tap()
         app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Piątkowa wyprawa do planetarium")).firstMatch.tap()
         let mark = app.webViews.buttons["Oznacz jako przeczytane"].firstMatch

@@ -77,6 +77,7 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/mahbrus-legacy-ui-build"
           -resultBundlePath "$RUNNER_TEMP/mahbrus-legacy-ui-results.xcresult"
           -only-testing:PromenadaUITests/PromenadaUITests/testRememberedAccessOfflineAndLogout
+          -only-testing:PromenadaUITests/PromenadaUITests/testChildViewsStaySeparate
           -only-testing:PromenadaUITests/PromenadaUITests/testStudentRejectsFamilyReportEvenWithItsPassword
           CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=-
           CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
