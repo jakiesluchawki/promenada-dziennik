@@ -13,6 +13,42 @@ chłopca; starszy ma swobodną pozę i spodnie dzwony. Młodszy zachowany.
 Dodatkowo użytkownik zatwierdził kompozycję i poprosił o filcową fakturę tła.
 Końcowa sceneria zastępuje różowe studio jasnym niebem, chmurami i spokojną
 uliczką do szkoły, z zachowaniem filcowej stylistyki oraz postaci.
+Po uwadze użytkownika o artefaktach iterowanych edycji obraz wyrenderowano od
+początku z pierwszej czystej referencji materiału. Produkcyjna wersja nie jest
+kolejnym filtrem na obrazie z geometryczną fakturą.
+
+Prompt czystego renderu: Create a COMPLETELY NEW clean high-quality render of a
+square iOS app icon. Do NOT filter, denoise, resample, trace or repeatedly edit a
+prior generated icon. Rebuild every object from scratch with pristine natural
+wool felt materials. Reference image 1 is the FIRST family icon: match its
+exceptionally soft fine fuzzy wool felt texture and lovable character design;
+use it as the material/character reference, not its old dog pose or old studio
+background. Reference image 2 is the original CHMURNIK icon: use its restrained
+tactile handcrafted material aesthetic. Final required scene: two felt boy
+figurines stand close together on a quiet pale cream stone school street. Taller
+older boy Kostek on left has brown tousled felt hair, an easy slightly nonchalant
+relaxed pose, hand in pocket, loose plain olive sweater and olive bell-bottom/
+flared trousers, wider below knees. Younger much shorter Wicio beside him has
+soft blonde hair, sweet simple smiling face, plain powder-blue sweater/trousers.
+Wicio gently cradles one SMALL BROWN DACHSHUND horizontally in both arms:
+unmistakably long slender sausage body, short legs, long floppy ears, narrow
+muzzle, little tail; small enough to hold comfortably, but clearly long rather
+than a round teddy puppy. Cream school with muted olive roof stands softly
+behind them. A pale powder-blue sky, a few very delicate cream clouds, subtle
+low green hedges, a warm light cobblestone pedestrian street/path leading to
+school. Elegant white sailplane with long slender wings and no propeller above.
+Keep environment simple, calm and secondary. Characters dominate, warm daylight
+and soft shadows, clean legible small-icon composition. CRITICAL MATERIAL:
+smooth softly sculpted forms with RANDOM fine natural fuzzy fibres like real
+wool felt, soft velvety nap; PLAIN unpatterned clothing and faces. Absolutely NO
+geometric pattern, NO tessellation, NO polygon mesh, NO Penrose mosaic, NO
+embossed network, NO cracks, NO etched outlines, NO crosshatching, NO woven or
+knitted stitch patterns, NO repetitive artificial texture, NO compression
+artifacts. Faces have smooth softly fuzzy felt skin and simple eyes/smiles. Fine
+wool fibres are visible but not a dense overprocessed grain. This should look as
+pristine and naturally soft as reference 1, not like a sharpened multi-generation
+edit. Full bleed opaque square, no rounded border or text. Exactly two boys and
+one small long dachshund. Production app icon, 1024 square.
 
 Prompt scenerii: Edit the BACKGROUND/ENVIRONMENT ONLY of this approved felt family
 app icon. The owner wants an actual gentle outdoor setting, not a solid pink
