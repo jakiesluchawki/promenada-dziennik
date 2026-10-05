@@ -46,7 +46,7 @@ struct AttachmentV2ContractTests {
             try require(try authorized.ref.decrypt(ciphertext, aad: authorized.aad) == plaintext, "Cross-language decryption differs")
             try require(ciphertext.count == authorized.ref.paddedSize + 16, "Padding length differs")
             try reject("Truncated ciphertext was accepted") { _ = try authorized.ref.decrypt(ciphertext.dropLast(), aad: authorized.aad) }
-            var modified = ciphertext; modified[0] ^= 1
+            var modified = ciphertext; modified[modified.startIndex] ^= 1
             try reject("Corrupt ciphertext was accepted") { _ = try authorized.ref.decrypt(modified, aad: authorized.aad) }
             try reject("Cross-context AAD was accepted") { _ = try authorized.ref.decrypt(ciphertext, aad: Data("other context".utf8)) }
             for (field, value) in [("accountKey", "other"), ("source", "timetable"), ("messageId", "other"), ("name", "other.bin")] {

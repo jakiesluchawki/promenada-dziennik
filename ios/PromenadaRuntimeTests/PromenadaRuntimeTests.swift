@@ -145,7 +145,13 @@ final class PromenadaRuntimeTests: XCTestCase {
     }
     private func assertProtected(_ url: URL, file: StaticString = #filePath, line: UInt = #line) throws {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        XCTAssertEqual(attributes[.protectionKey] as? FileProtectionType, .complete, file: file, line: line)
+        let metadata = attributes[.protectionKey]
+        // FileManager may bridge this attribute as NSString rather than the Swift wrapper.
+        let protection = (metadata as? FileProtectionType)?.rawValue ?? (metadata as? String)
+        let metadataType = metadata.map { String(reflecting: type(of: $0)) } ?? "<missing>"
+        XCTAssertEqual(protection, FileProtectionType.complete.rawValue,
+                       "Protection metadata for \(url.lastPathComponent): type=\(metadataType), raw=\(String(describing: metadata)). Simulator metadata is not physical locked-device validation.",
+                       file: file, line: line)
         XCTAssertEqual(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true, file: file, line: line)
         // Simulator verifies requested attributes, not physical locked-device key eviction.
     }
@@ -240,7 +246,9 @@ final class PromenadaRuntimeTests: XCTestCase {
         let f = Self.parent; configure(f)
         let reader = store(); _ = try await reader.load(access: f.access)
         _ = try await reader.attachment(f.request, access: f.access)
-        var bad = f.ciphertext; bad[0] ^= 1
+        var bad = f.ciphertext
+        // CryptoKit Data slices need not start at index zero.
+        bad[bad.startIndex] ^= 1
         try bad.write(to: blobURL(f), options: [.atomic, .completeFileProtection])
         configure(f)
         let recovered = try await reader.attachment(f.request, access: f.access)

@@ -54,6 +54,9 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/mahbrus-runtime-build"
           -resultBundlePath "$RUNNER_TEMP/mahbrus-runtime-results.xcresult"
           -only-testing:PromenadaRuntimeTests CODE_SIGNING_ALLOWED=NO
+      - name: Report bounded synthetic runtime failure diagnostics
+        if: always()
+        run: python3 ios/tests/report-runtime-diagnostics.py
       - name: Run synthetic legacy login, offline, logout and student rejection UI smoke
         run: >-
           xcodebuild test -project ios/Promenada.xcodeproj -scheme Mahbrus
