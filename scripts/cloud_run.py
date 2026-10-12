@@ -7,6 +7,7 @@ ROOT = BASE.parent
 os.environ["PROMENADA_SITE_DIR"] = str(ROOT)
 sys.path.insert(0, str(BASE))
 import collector, publisher
+from librus_http import FAILURE_CODES
 from report_errors import Diagnostics
 from report_sources import reconcile_sources
 
@@ -58,6 +59,10 @@ def main(on_phase=lambda phase: None):
         finally:
             collector.BASE, publisher.BASE = old_bases
     print("Encrypted report prepared. " + ("Some accounts require attention; last good data preserved." if failed else "All accounts refreshed."))
+    if failed:
+        codes = [a.get("error_code", "collection_failed") for a in state["accounts"].values() if a.get("status") != "ok"]
+        # Counts and fixed labels only: no names, URLs, credentials or exception text.
+        print("Collection diagnostics: " + " ".join(f"{code}={codes.count(code)}" for code in sorted(FAILURE_CODES) if code in codes))
 
 
 def run():

@@ -20,6 +20,8 @@ Netlify zleca odczyt rodziców o 06:30 i 18:00, a ucznia dwie minuty później (
 
 Sekrety LIBRUS_ACCOUNTS i SITE_PASSWORD są przekazywane wyłącznie do etapu kolektora. Artefakt Pages zawiera tylko dozwolone pliki interfejsu i szyfrogram. Przy błędzie konta zachowywany jest ostatni poprawny odczyt oraz ostrzeżenie.
 
+Przejściowy timeout, błąd połączenia lub odpowiedź 502/503/504 przy odczycie strony uruchamia najwyżej dwie ponowne próby po 2 i 5 sekundach. Czas zestawiania pojedynczego połączenia wynosi 5 sekund, a limit oczekiwania na treść pozostaje bez zmian. Logowanie POST, CAPTCHA, odmowy dostępu, ograniczenie 429 i błędy TLS nie są ponawiane. Publiczne logi zawierają wyłącznie stały kod przyczyny i licznik, bez treści danych ani poświadczeń. Harmonogram dwóch odczytów dziennie pozostaje bez zmian.
+
 ## Nowości i priorytety
 Fioletowe znaczniki wskazują nieprzejrzane treści, bordowe bliskie lub przekroczone terminy, oliwkowe sprawy do dopilnowania, a niebieskie informacje. Priorytet wiadomości można zmienić. Stan przeczytania i wykonania zapisuje się w danej przeglądarce, bez synchronizacji między urządzeniami. Nowe treści są pobierane automatycznie; pierwsza lista spraw została opracowana ręcznie, a priorytety korzystają z prostych reguł, bez modelu AI.
 

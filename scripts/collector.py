@@ -5,6 +5,7 @@ BASE=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(BASE/"vendor"))
 import requests
 from bs4 import BeautifulSoup
+from librus_http import request, failure_code
 os.umask(0o077)
 SERVICE=b"pl.mahboob.promenada.librus"
 def secret(account):
@@ -24,23 +25,23 @@ def login(key):
     info=json.loads(secret("accounts"))[key]
     s=requests.Session()
     s.headers["User-Agent"]="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    r=s.get("https://synergia.librus.pl/loguj/portalRodzina",timeout=30)
+    r=request(s,"GET","https://synergia.librus.pl/loguj/portalRodzina",timeout=30)
     r.raise_for_status()
     if urlparse(r.url).hostname!="api.librus.pl": raise RuntimeError("Unexpected login destination")
-    c=s.post("https://api.librus.pl/OAuth/Captcha",data={"username":info["login"],"is_needed":1},headers={"X-Requested-With":"XMLHttpRequest","Referer":r.url},timeout=30)
+    c=request(s,"POST","https://api.librus.pl/OAuth/Captcha",data={"username":info["login"],"is_needed":1},headers={"X-Requested-With":"XMLHttpRequest","Referer":r.url},timeout=30)
     c.raise_for_status()
     if c.json().get("is_needed"): raise RuntimeError("Librus requires CAPTCHA; user action needed")
     encode=lambda st: "".join(chr(ord(x)+20) for x in st)
     baner=encode(str(random.random()))+"_"+encode(str(int(time.time()*1000)))
-    a=s.post(r.url,data={"action":"login","login":info["login"],"pass":info["password"]},headers={"x-baner":baner,"X-Requested-With":"XMLHttpRequest","Referer":r.url},timeout=30)
+    a=request(s,"POST",r.url,data={"action":"login","login":info["login"],"pass":info["password"]},headers={"x-baner":baner,"X-Requested-With":"XMLHttpRequest","Referer":r.url},timeout=30)
     try: result=a.json()
     except ValueError: raise RuntimeError("Login returned non-JSON status "+str(a.status_code))
     if result.get("status")!="ok":
         raise RuntimeError("Login requires attention: "+str(result.get("status"))+" "+str([e.get("message","") for e in result.get("errors",[])]))
     target=urljoin(r.url,result.get("goTo",""))
     if urlparse(target).hostname not in ["synergia.librus.pl","api.librus.pl"]: raise RuntimeError("Unexpected login redirect")
-    s.get(target,timeout=30).raise_for_status()
-    page=s.get("https://synergia.librus.pl/wiadomosci",timeout=30)
+    request(s,"GET",target,timeout=30).raise_for_status()
+    page=request(s,"GET","https://synergia.librus.pl/wiadomosci",timeout=30)
     page.raise_for_status()
     doc=BeautifulSoup(page.text,"html.parser")
     identity=doc.select_one("#user-section") or doc.select_one(".user-section")
@@ -59,7 +60,7 @@ def text_clean(el):
     return re.sub(r"\n{3,}","\n\n",text).strip()
 def checked_get(s,url):
     if urlparse(url).hostname!="synergia.librus.pl": raise RuntimeError("Unsupported content destination")
-    r=s.get(url,timeout=30);r.raise_for_status()
+    r=request(s,"GET",url,timeout=30);r.raise_for_status()
     if urlparse(r.url).hostname!="synergia.librus.pl" or "/loguj" in r.url: raise RuntimeError("Session expired")
     return BeautifulSoup(r.text,"html.parser")
 
@@ -131,21 +132,21 @@ def parse_section(name,d,section):
 
 def download_attachment(s,url,name):
     import base64
-    r=s.get(url,timeout=30);r.raise_for_status()
+    r=request(s,"GET",url,timeout=30);r.raise_for_status()
     if "text/html" in r.headers.get("Content-Type",""):
         if urlparse(r.url).hostname!="sandbox.librus.pl":raise RuntimeError("Unexpected attachment page")
         key=re.search(r'var singleUseKey = "([^"]+)"',r.text)
         if not key:raise RuntimeError("Attachment download key missing")
         value=key.group(1)
         for _ in range(6):
-            check=s.post("https://sandbox.librus.pl/index.php?action=CSCheckKey",data={"singleUseKey":value},timeout=30)
+            check=request(s,"POST","https://sandbox.librus.pl/index.php?action=CSCheckKey",data={"singleUseKey":value},timeout=30)
             check.raise_for_status()
             state=check.json().get("status")
             if state=="ready":break
             if state!="not_downloaded_yet":raise RuntimeError("Attachment unavailable")
             time.sleep(2)
         else:raise RuntimeError("Attachment preparation timed out")
-        r=s.get("https://sandbox.librus.pl/index.php",params={"action":"CSDownload","singleUseKey":value},timeout=45)
+        r=request(s,"GET","https://sandbox.librus.pl/index.php",params={"action":"CSDownload","singleUseKey":value},timeout=45)
         r.raise_for_status()
     if "text/html" in r.headers.get("Content-Type",""):raise RuntimeError("Attachment is not a downloadable file")
     if len(r.content)>8_000_000:raise RuntimeError("Attachment exceeds 8 MB")
@@ -261,7 +262,7 @@ def main():
             snapshot["accounts"][key]=data
             print(json.dumps({"child":key,"status":"ok","messages":len(data["messages"]),"announcements":len(data["announcements"]),"new":len(new_ids),"timetable_days":len(data["sections"].get("timetable",{}).get("days",[]))},ensure_ascii=False))
         except Exception as e:
-            data=dict(old);data["status"]="error";data["error"]=str(e);data["child"]=key
+            data=dict(old);data["status"]="error";data["error"]=str(e);data["error_code"]=failure_code(e);data["child"]=key
             snapshot["accounts"][key]=data
             print(json.dumps({"child":key,"status":"error","error":str(e)},ensure_ascii=False))
     tmp=BASE/"snapshot.tmp"
