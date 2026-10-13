@@ -6,6 +6,8 @@ GitHub token: fine-grained PAT, tylko jakiesluchawki/promenada-dziennik, Actions
 
 POST /api/refresh uruchamia workflow. GET /api/refresh?run=ID sprawdza postęp, z tym samym Authorization: Bearer. Błędny klucz kończy się 401 bez połączenia z GitHubem. Brak konfiguracji lub błąd GitHuba kończy się 503 bez ujawnienia odpowiedzi upstream.
 
+Przejściowe odpowiedzi 502/503/504 z API GitHuba przy odczycie metadanych GET są ponawiane jeden raz po 250 ms, w ramach wspólnego limitu 22 sekund. POST zlecający workflow nie jest powtarzany, żeby nie tworzyć dodatkowych odczytów. Odmowy dostępu i inne błędy nie są ponawiane.
+
 Odstęp między próbami: 5 minut, kontrolowany również wewnątrz serializowanego workflow. Odczyty rodziców i ucznia są osobne. Netlify wyzwala rodziców o 06:30 i 18:00 Europe/Warsaw, ucznia dwie minuty później. W razie potrzeby ponawia po 10 i 20 minutach, a po wyczerpaniu tych prób czeka na jedną dodatkową próbę po 60 minutach; maksymalnie cztery próby na okno. Późna próba obejmuje 07:30/19:00 dla rodziców oraz 07:32/19:02 dla ucznia, także zimą. Funkcje mają harmonogram UTC obejmujący oba przesunięcia czasu; kod ogranicza pracę do właściwego okna w Warszawie. Uruchomienia poza oknem nie wywołują nawet GitHuba. Nie używamy już opóźnianego zdarzenia schedule GitHuba.
 
 Zdrowy, zweryfikowany raport z danego okna wyłącza wszystkie dalsze próby. Pomiędzy trzecią a późną czwartą próbą nadzór zwraca `recovery_wait`, bez ponownego logowania. Wydłużenie nadzoru nie zwiększa liczby normalnych odczytów; służy wyłącznie odzyskaniu brakującego raportu po dłuższej awarii sieci.
@@ -14,6 +16,6 @@ Watchdog nie odszyfrowuje raportów. Sprawdza w Actions, czy krok „Verify fres
 
 Wywołanie harmonogramu używa inputs.scheduled=true. Kolektor pomija zdrowy odczyt już wykonany w tym oknie; jeśli poprzednio zawiodła publikacja, można ponownie opublikować istniejący szyfrogram bez logowania do Librusa. Nie zapisujemy danych szkolnych ani ich haseł na Netlify. Wolna kolejka GitHuba lub awaria usług nadal może opóźnić raport; aplikacja pokazuje informację o starszych danych od 07:00/18:30. Uruchomienie przyciskiem nie omija kontroli dostępu Librusa, CAPTCHA ani ograniczeń konta.
 
-Wdrożenie: oficjalny Netlify CLI, katalog server, projekt mahbrus-refresh. Tylko public/ i funkcje. Pozostała aplikacja i zaszyfrowane raporty nadal na GitHub Pages. Nie podłączaj automatycznych deployów serwera do aktualizacji raportu: niepotrzebnie zużywałyby kredyty Netlify.
+Wdrożenie: oficjalny Netlify CLI, katalog server, projekt mahbrus-refresh. Używaj `netlify deploy --prod --skip-functions-cache` z domyślnym etapem budowania, aby przebudować funkcje z aktualnego kodu. Przed potwierdzeniem wdrożenia sprawdź harmonogramy w `.netlify/functions/manifest.json` i odpowiedź produkcyjnego brokera. Tylko public/ i funkcje. Pozostała aplikacja i zaszyfrowane raporty nadal na GitHub Pages. Nie podłączaj automatycznych deployów serwera do aktualizacji raportu: niepotrzebnie zużywałyby kredyty Netlify.
 
 Testy: npm test (Node z obsługą TypeScript stripping).

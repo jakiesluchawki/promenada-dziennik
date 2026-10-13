@@ -1,5 +1,6 @@
 // No school data or report passwords: inspect verified steps or their receipt.
 import { publicationVerified } from './publication.mts';
+import { fetchGitHub } from './github-read.mts';
 export { VERIFIED_STEP } from './publication.mts';
 // Keep the normal two collection slots. One delayed recovery covers outages
 // longer than the original twenty-minute retry window, without frequent polling.
@@ -21,7 +22,7 @@ export async function watchdog(profile: 'parent' | 'student', token: string | un
   const workflow = profile === 'parent' ? 'update.yml' : 'update-student.yml';
   const signal = AbortSignal.timeout(22000); // Entire check fits Netlify's 30s limit.
   const github = async (path: string, body?: object) => {
-    const response = await fetcher(root + path, { method: body ? 'POST' : 'GET', signal, redirect: 'error', headers: { Authorization: `Bearer ${token.trim()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const response = await fetchGitHub(root + path, { method: body ? 'POST' : 'GET', signal, redirect: 'error', headers: { Authorization: `Bearer ${token.trim()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }, fetcher);
     if (!response.ok) throw new Error(`GitHub status ${response.status}`);
     return response.status === 204 ? null : response.json();
   };

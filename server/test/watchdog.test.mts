@@ -71,7 +71,7 @@ test('configured UTC schedules include the delayed recovery in summer and winter
 test('API failure never dispatches blindly', async () => {
   let calls = 0;
   await assert.rejects(watchdog('parent', 'fixture', (async () => { calls++; return new Response(null, { status: 503 }); }) as typeof fetch, now));
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
 });
 test('a current verification receipt suppresses retries when steps are missing', async () => {
   const calls: { url: string; method?: string }[] = [];

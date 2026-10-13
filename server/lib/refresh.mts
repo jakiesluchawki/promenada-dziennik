@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { publicationVerified } from './publication.mts';
+import { fetchGitHub } from './github-read.mts';
 export type Settings = { githubToken?: string; parentHash?: string; studentHash?: string };
 type Run = { id: number; run_attempt?: number; status: string; conclusion: string | null; created_at: string; path: string; head_branch: string };
 function reply(state: string, message: string, status = 200, run: string | null = null) {
@@ -20,9 +21,9 @@ export async function handle(req: Request, env: Settings, fetcher: typeof fetch 
   const root = 'https://api.github.com/repos/jakiesluchawki/promenada-dziennik/actions';
   const signal = AbortSignal.timeout(22000);
   async function github(path: string, method = 'GET', body?: object) {
-    const response = await fetcher(root + path, { method, redirect: 'error', signal,
+    const response = await fetchGitHub(root + path, { method, redirect: 'error', signal,
       headers: { Authorization: `Bearer ${env.githubToken.trim()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
-      ...(body ? { body: JSON.stringify(body) } : {}) });
+      ...(body ? { body: JSON.stringify(body) } : {}) }, fetcher);
     if (!response.ok) {
       console.error('mahbrus_refresh_github', { status: response.status, method, workflow });
       throw new Error('GitHub unavailable');
