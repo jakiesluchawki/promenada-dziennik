@@ -1,14 +1,17 @@
 // No school data or report passwords: inspect verified publication steps only.
 export const VERIFIED_STEP = 'Verify fresh published report';
+// Keep the normal two collection slots. One delayed recovery covers outages
+// longer than the original twenty-minute retry window, without frequent polling.
+export const ATTEMPT_OFFSETS = [0, 10, 20, 60] as const;
 const root = 'https://api.github.com/repos/jakiesluchawki/promenada-dziennik/actions';
 type Run = { id: number; status: string; conclusion: string | null; created_at: string; path: string; head_branch: string; display_title: string };
 export function windowAt(now: Date) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(p => [p.type, p.value]));
   const minute = Number(p.hour) * 60 + Number(p.minute);
   const start = minute >= 1080 ? 1080 : 390;
-  // Three checks, ten minutes apart; two minutes of staggering between profiles.
-  if (minute < start || minute > start + 25) return null;
-  return { since: now.getTime() - (minute - start) * 60000 - now.getUTCSeconds() * 1000 - now.getUTCMilliseconds(), key: `${p.year}-${p.month}-${p.day}-${start}` };
+  // Five minutes of scheduling tolerance includes the student's +2 minute stagger.
+  if (minute < start || minute > start + ATTEMPT_OFFSETS.at(-1)! + 5) return null;
+  return { since: now.getTime() - (minute - start) * 60000 - now.getUTCSeconds() * 1000 - now.getUTCMilliseconds(), key: `${p.year}-${p.month}-${p.day}-${start}`, elapsedMinutes: minute - start };
 }
 export async function watchdog(profile: 'parent' | 'student', token: string | undefined, fetcher: typeof fetch = fetch, now = new Date()) {
   const slot = windowAt(now);
@@ -30,7 +33,8 @@ export async function watchdog(profile: 'parent' | 'student', token: string | un
     if (result.jobs.some((job: { steps?: { name: string; conclusion: string }[] }) => job.steps?.some(step => step.name === VERIFIED_STEP && step.conclusion === 'success'))) return { state: 'fresh' };
   }
   const attempts = recent.filter(r => r.display_title?.startsWith('Scheduled report')).length;
-  if (attempts >= 3) return { state: 'attempts_exhausted' };
+  if (attempts >= ATTEMPT_OFFSETS.length) return { state: 'attempts_exhausted' };
+  if (slot.elapsedMinutes < ATTEMPT_OFFSETS[attempts]) return { state: 'recovery_wait' };
   if (recent.some(r => now.getTime() - Date.parse(r.created_at) < 5 * 60000)) return { state: 'cooldown' };
   await github(`/workflows/${workflow}/dispatches`, { ref: 'main', inputs: { scheduled: 'true' } });
   return { state: 'dispatched', attempt: attempts + 1 };
