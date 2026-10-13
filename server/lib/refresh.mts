@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { VERIFIED_STEP } from './watchdog.mts';
+import { publicationVerified } from './publication.mts';
 export type Settings = { githubToken?: string; parentHash?: string; studentHash?: string };
-type Run = { id: number; status: string; conclusion: string | null; created_at: string; path: string; head_branch: string };
+type Run = { id: number; run_attempt?: number; status: string; conclusion: string | null; created_at: string; path: string; head_branch: string };
 function reply(state: string, message: string, status = 200, run: string | null = null) {
   return Response.json({ state, message, run }, { status, headers: { 'Cache-Control': 'no-store' } });
 }
@@ -18,8 +18,9 @@ export async function handle(req: Request, env: Settings, fetcher: typeof fetch 
   if (!workflow) return reply('error', 'Brak dostępu.', 401);
   if (!env.githubToken) return reply('error', 'Odczyt nie jest jeszcze skonfigurowany.', 503);
   const root = 'https://api.github.com/repos/jakiesluchawki/promenada-dziennik/actions';
+  const signal = AbortSignal.timeout(22000);
   async function github(path: string, method = 'GET', body?: object) {
-    const response = await fetcher(root + path, { method, redirect: 'error', signal: AbortSignal.timeout(15000),
+    const response = await fetcher(root + path, { method, redirect: 'error', signal,
       headers: { Authorization: `Bearer ${env.githubToken.trim()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!response.ok) {
@@ -38,10 +39,9 @@ export async function handle(req: Request, env: Settings, fetcher: typeof fetch 
       if (!run) return reply('queued', 'Oczekiwanie na uruchomienie odczytu…', 200, query);
       if (run.status !== 'completed') return reply('running', 'Pobieranie i publikowanie raportu…', 200, String(run.id));
       if (run.conclusion === 'success') {
-        const result = await github(`/runs/${run.id}/jobs?per_page=100`);
-        const verified = result.jobs.some((job: { steps?: { name: string; conclusion: string }[] }) => job.steps?.some(step => step.name === VERIFIED_STEP && step.conclusion === 'success'));
+        const verified = await publicationVerified(github, run);
         if (verified) return reply('complete', 'Raport jest gotowy.', 200, String(run.id));
-        return reply('cooldown', 'Ta próba nie wykonała nowego odczytu. Wczytuję ostatni dostępny raport.', 200, String(run.id));
+        return reply('cooldown', 'GitHub nie potwierdził jeszcze weryfikacji publikacji. Wczytuję dostępny raport.', 200, String(run.id));
       }
       return reply('failed', 'Odczyt nie zakończył się poprawnie. Poprzedni raport pozostaje dostępny.', 200, String(run.id));
     }

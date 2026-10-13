@@ -46,3 +46,16 @@ test('skipped collection cannot claim a freshly published report', async () => {
   const fetcher = (async (url) => Response.json(String(url).includes('/jobs?') ? { jobs: [{ steps: [{ name: 'Verify fresh published report', conclusion: 'skipped' }] }] } : { workflow_runs: [{ id: 25, status: 'completed', conclusion: 'success', created_at: new Date().toISOString(), head_branch: 'main', path: '.github/workflows/update-student.yml' }] })) as typeof fetch;
   assert.equal((await (await handle(request(student, 'GET', '?run=25'), env, fetcher)).json()).state, 'cooldown');
 });
+test('a current receipt completes a student refresh when GitHub omits job steps', async () => {
+  const calls: string[] = [];
+  const fetcher = (async (url, options) => {
+    assert.notEqual(options?.method, 'POST');
+    const path = String(url); calls.push(path);
+    return Response.json(path.includes('/jobs?') ? { jobs: [{ steps: [] }] } : path.includes('/artifacts?') ? {
+      artifacts: [{ name: 'mahbrus-verified-publication-v1-1', expired: false, size_in_bytes: 250 }],
+    } : { workflow_runs: [{ id: 25, run_attempt: 1, status: 'completed', conclusion: 'success', created_at: new Date().toISOString(), head_branch: 'main', path: '.github/workflows/update-student.yml' }] });
+  }) as typeof fetch;
+  assert.equal((await (await handle(request(student, 'GET', '?run=25'), env, fetcher)).json()).state, 'complete');
+  assert.ok(calls[0].includes('/update-student.yml/'));
+  assert.ok(calls.slice(1).every(url => url.includes('/runs/25/')));
+});

@@ -85,3 +85,19 @@ jobs:
         env:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: python scripts/verify_publication.py
+      - name: Record verified publication
+        if: steps.guard.outputs.allowed == 'true'
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          receipt = {"v": 1, "verified": True, "run": os.environ["GITHUB_RUN_ID"], "attempt": int(os.environ["GITHUB_RUN_ATTEMPT"])}
+          pathlib.Path(os.environ["RUNNER_TEMP"], "mahbrus-publication.json").write_text(json.dumps(receipt))
+          PY
+      - name: Save publication verification receipt
+        if: steps.guard.outputs.allowed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mahbrus-verified-publication-v1-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/mahbrus-publication.json
+          if-no-files-found: error
+          retention-days: 1

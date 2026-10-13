@@ -73,3 +73,14 @@ test('API failure never dispatches blindly', async () => {
   await assert.rejects(watchdog('parent', 'fixture', (async () => { calls++; return new Response(null, { status: 503 }); }) as typeof fetch, now));
   assert.equal(calls, 1);
 });
+test('a current verification receipt suppresses retries when steps are missing', async () => {
+  const calls: { url: string; method?: string }[] = [];
+  const fetcher = (async (url, options) => {
+    calls.push({ url: String(url), method: options?.method });
+    return Response.json(String(url).includes('/jobs?') ? { jobs: [] } : String(url).includes('/artifacts?') ? {
+      artifacts: [{ name: 'mahbrus-verified-publication-v1-1', expired: false, size_in_bytes: 250 }],
+    } : { workflow_runs: [run(1)] });
+  }) as typeof fetch;
+  assert.equal((await watchdog('parent', 'fixture', fetcher, now)).state, 'fresh');
+  assert.ok(calls.every(call => call.method === 'GET'));
+});
