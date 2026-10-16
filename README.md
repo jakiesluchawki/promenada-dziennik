@@ -22,6 +22,8 @@ Sekrety LIBRUS_ACCOUNTS i SITE_PASSWORD są przekazywane wyłącznie do etapu ko
 
 Przejściowy timeout, błąd połączenia lub odpowiedź 502/503/504 przy odczycie strony uruchamia najwyżej dwie ponowne próby po 2 i 5 sekundach. Czas zestawiania pojedynczego połączenia wynosi 5 sekund, a limit oczekiwania na treść pozostaje bez zmian. Logowanie POST, CAPTCHA, odmowy dostępu, ograniczenie 429 i błędy TLS nie są ponawiane. Publiczne logi zawierają wyłącznie stały kod przyczyny i licznik, bez treści danych ani poświadczeń. Harmonogram dwóch odczytów dziennie pozostaje bez zmian.
 
+Stronicowanie skrzynki obsługuje zarówno zwykłe linki, jak i formularz Librusa „Następna”. Kolektor rozpoznaje wyłącznie zmianę ukrytego numeru strony i wysyła kontekst nawigacji do `/wiadomosci`; nie wykonuje JavaScriptu ani operacji na zaznaczonych wiadomościach. Żądanie POST nie jest ponawiane. Limit 20 stron, kontrola postępu i odrzucanie nieznanych formularzy chronią przed zapętleniem i pozornie poprawnym, niepełnym odczytem. Przy błędzie nadal pozostają ostatnie poprawne dane i ich rzeczywisty czas odczytu.
+
 ## Nowości i priorytety
 Fioletowe znaczniki wskazują nieprzejrzane treści, bordowe bliskie lub przekroczone terminy, oliwkowe sprawy do dopilnowania, a niebieskie informacje. Priorytet wiadomości można zmienić. Stan przeczytania i wykonania zapisuje się w danej przeglądarce, bez synchronizacji między urządzeniami. Nowe treści są pobierane automatycznie; pierwsza lista spraw została opracowana ręcznie, a priorytety korzystają z prostych reguł, bez modelu AI.
 

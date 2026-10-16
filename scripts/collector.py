@@ -58,11 +58,65 @@ def text_clean(el):
     for tag in el.select("script,style,noscript"): tag.decompose()
     text=el.get_text("\n",strip=True)
     return re.sub(r"\n{3,}","\n\n",text).strip()
-def checked_get(s,url):
-    if urlparse(url).hostname!="synergia.librus.pl": raise RuntimeError("Unsupported content destination")
-    r=request(s,"GET",url,timeout=30);r.raise_for_status()
+def checked_page(s,url,*,method="GET",data=None):
+    target=urlparse(url)
+    if target.scheme!="https" or target.netloc!="synergia.librus.pl": raise RuntimeError("Unsupported content destination")
+    kwargs={"data":data} if data is not None else {}
+    r=request(s,method,url,timeout=30,**kwargs);r.raise_for_status()
     if urlparse(r.url).hostname!="synergia.librus.pl" or "/loguj" in r.url: raise RuntimeError("Session expired")
     return BeautifulSoup(r.text,"html.parser")
+
+def checked_get(s,url):
+    return checked_page(s,url)
+
+def next_mailbox_page(s,page,page_count,visited):
+    """Follow Librus's inbox pager without evaluating JavaScript or posting actions."""
+    link=page.find("a",string=re.compile(r"^\s*(następna|następne|dalej|next)\s*[>»›→]?\s*$",re.I))
+    if not link or not link.get("href"):return None
+    if page_count>=20:raise RuntimeError("Mailbox page limit reached")
+    href=link["href"].strip()
+    target=urljoin("https://synergia.librus.pl",href)
+    method="GET";data=None
+    if urlparse(href).scheme.lower()=="javascript":
+        # The real pager sets one hidden page number and submits formWiadomosci.
+        # Recognise only that exact operation, never execute code from the page.
+        match=re.fullmatch(
+            r"\s*document\.getElementById\('(?P<field>numer_strony\d+)'\)\.value=(?P<page>\d+);\s*"
+            r"document\.getElementById\('(?P=field)'\)\.form\.submit\(\);?\s*",
+            link.get("onclick","")
+        )
+        if not match:raise RuntimeError("Unsupported mailbox pagination")
+        field=match["field"];number=int(match["page"])
+        control=page.find("input",id=field)
+        form=control.find_parent("form") if control else None
+        if (control is None or control.get("name")!=field or control.get("type","").lower()!="hidden"
+            or not str(control.get("value","")).isdigit() or number!=int(control["value"])+1
+            or form is None or form.get("name")!="formWiadomosci" or form.get("method","").upper()!="POST"):
+            raise RuntimeError("Invalid mailbox pagination form")
+        target=urljoin("https://synergia.librus.pl",form.get("action",""))
+        if target!="https://synergia.librus.pl/wiadomosci":raise RuntimeError("Unsupported mailbox pagination destination")
+        data=[]
+        for el in form.select("input[name]"):
+            name=el["name"]
+            if el.get("type","").lower()!="hidden" or el.has_attr("disabled"):continue
+            if name in {"requestkey","filtrUzytkownikow","idPojemnika","poprzednia"} or re.fullmatch(r"sortujTabele\[tabele(Kolumna|Kierunek|Pojemnik)\]|sortowanie\[\d+\]\[\d+\]",name):
+                data.append((name,el.get("value","")))
+        # Do not submit message selection, delete/mark-read controls or bulk actions.
+        data.append((field,str(number)))
+        method="POST";token=(target,field,number)
+    else:
+        parsed=urlparse(target)
+        if parsed.path!="/wiadomosci" and not parsed.path.startswith("/wiadomosci/5/") and parsed.path!="/wiadomosci/5":
+            raise RuntimeError("Unsupported mailbox pagination destination")
+        token=(target,)
+    if token in visited:raise RuntimeError("Mailbox pagination did not advance")
+    following=checked_page(s,target,method=method,data=data)
+    ids=lambda doc:{re.search(r"/wiadomosci/1/5/(\d+)",a["href"])[1] for a in doc.select('a[href*="/wiadomosci/1/5/"]') if re.search(r"/wiadomosci/1/5/(\d+)",a["href"])}
+    following_ids=ids(following)
+    if not following_ids:raise RuntimeError("Mailbox pagination returned no messages")
+    if following_ids==ids(page):raise RuntimeError("Mailbox pagination did not advance")
+    visited.add(token)
+    return following
 
 def tooltip(value):
     return BeautifulSoup(value or "", "html.parser").get_text("\n",strip=True)
@@ -156,7 +210,7 @@ def collect_account(key, previous):
     s,doc,_=login(key)
     known={x["id"]:x for x in previous.get("messages",[])}
     messages=[]; seen=set()
-    pages=[doc]
+    pages=[doc];visited_pages=set()
     for page in pages:
         for row in page.select("tr"):
             links=row.select('a[href*="/wiadomosci/1/5/"]')
@@ -198,10 +252,8 @@ def collect_account(key, previous):
                 except Exception as e: attachments.append({"name":filename,"error":str(e),"url":url})
             messages.append({"attachment_version":2,"id":mid,"child":key,"kind":"message","title":meta.get("Temat",links[-1].get_text(" ",strip=True)),"sender":meta.get("Nadawca",links[0].get_text(" ",strip=True)),"date":meta.get("Wysłano",""),"text":text_clean(content),"url":url,"attachments":attachments})
             time.sleep(.15)
-        next_link=page.find("a",string=re.compile(r"^(następna|następne|dalej|next)",re.I))
-        if next_link and next_link.get("href"):
-            if len(pages)>=20:raise RuntimeError("Mailbox page limit reached")
-            pages.append(checked_get(s,urljoin("https://synergia.librus.pl",next_link["href"])))
+        following=next_mailbox_page(s,page,len(pages),visited_pages)
+        if following is not None:pages.append(following)
     for mid,m in known.items():
         if mid not in seen: messages.append(m)
     announcements=[]
