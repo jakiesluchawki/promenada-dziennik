@@ -25,6 +25,20 @@ test('two unsuccessful jobs still cannot certify publication', async () => {
   ] });
   assert.equal(await publicationVerified(github, { id: 25 }), false);
 });
+test('a receipt can fill omitted successful recovery steps, but never a failed recovery', async () => {
+  for (const conclusion of ['success', 'failure']) {
+    const calls: string[] = [];
+    const github = async (path: string) => {
+      calls.push(path);
+      return path.includes('/jobs?') ? { jobs: [
+        { steps: [{ name: VERIFIED_STEP, conclusion: 'skipped' }] },
+        { name: 'One recovery on a fresh runner', conclusion, steps: [] },
+      ] } : { artifacts: [{ name: RECEIPT_PREFIX + '1', expired: false, size_in_bytes: 250 }] };
+    };
+    assert.equal(await publicationVerified(github, { id: 25 }), conclusion === 'success');
+    assert.equal(calls.length, conclusion === 'success' ? 2 : 1);
+  }
+});
 test('a receipt verifies missing steps only for this exact run attempt', async () => {
   const calls: string[] = [];
   const github = async (path: string) => {
