@@ -7,7 +7,7 @@ ROOT = BASE.parent
 os.environ["PROMENADA_SITE_DIR"] = str(ROOT)
 sys.path.insert(0, str(BASE))
 import collector, publisher
-from librus_http import FAILURE_CODES
+from librus_http import FAILURE_CODES, prelogin_retryable
 from report_errors import Diagnostics
 from report_sources import reconcile_sources
 
@@ -55,6 +55,10 @@ def main(on_phase=lambda phase: None):
             on_phase("write_health")
             with open(os.environ.get("GITHUB_OUTPUT", str(BASE / "out.txt")), "a") as output:
                 output.write("healthy=" + ("false" if failed else "true") + "\n")
+                if failed and prelogin_retryable(state):
+                    from datetime import datetime
+                    since = datetime.fromisoformat(state["collected_at"]).isoformat()
+                    output.write("retryable=true\nrecovery_since=" + since + "\n")
             on_phase("cleanup")
         finally:
             collector.BASE, publisher.BASE = old_bases

@@ -9,8 +9,10 @@ type VerificationData = {
 export async function publicationVerified(github: (path: string) => Promise<VerificationData>, run: { id: number; run_attempt?: number }) {
   const result = await github(`/runs/${run.id}/jobs?per_page=100&filter=latest`);
   const steps = (Array.isArray(result.jobs) ? result.jobs : []).flatMap(job => job.steps || []);
-  const verification = steps.find(step => step.name === VERIFIED_STEP);
-  if (verification) return verification.conclusion === 'success';
+  const verifications = steps.filter(step => step.name === VERIFIED_STEP);
+  // The initial job may fail before login, then a fresh runner verifies recovery.
+  if (verifications.some(step => step.conclusion === 'success')) return true;
+  if (verifications.length) return false;
   // GitHub can omit steps even for a completed job. An artifact from this
   // exact run attempt provides independent proof; a green run alone does not.
   const attempt = run.run_attempt ?? 1;

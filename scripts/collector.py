@@ -5,7 +5,7 @@ BASE=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(BASE/"vendor"))
 import requests
 from bs4 import BeautifulSoup
-from librus_http import request, failure_code
+from librus_http import request, failure_code, PreLoginUnavailable, TRANSIENT_CODES
 os.umask(0o077)
 SERVICE=b"pl.mahboob.promenada.librus"
 def secret(account):
@@ -25,8 +25,13 @@ def login(key):
     info=json.loads(secret("accounts"))[key]
     s=requests.Session()
     s.headers["User-Agent"]="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    r=request(s,"GET","https://synergia.librus.pl/loguj/portalRodzina",timeout=30)
-    r.raise_for_status()
+    try:
+        r=request(s,"GET","https://synergia.librus.pl/loguj/portalRodzina",timeout=30)
+        r.raise_for_status()
+    except requests.RequestException as error:
+        s.close()
+        if failure_code(error) in TRANSIENT_CODES:raise PreLoginUnavailable(error) from error
+        raise
     if urlparse(r.url).hostname!="api.librus.pl": raise RuntimeError("Unexpected login destination")
     c=request(s,"POST","https://api.librus.pl/OAuth/Captcha",data={"username":info["login"],"is_needed":1},headers={"X-Requested-With":"XMLHttpRequest","Referer":r.url},timeout=30)
     c.raise_for_status()
@@ -301,12 +306,23 @@ def collect_account(key, previous):
             sections[name]["days"]=schedules
     return {"child":key,"status":"ok","checked_at":__import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),"messages":messages,"announcements":announcements,"sections":sections}
 def main():
+    from datetime import datetime,timezone
+    now=datetime.now(timezone.utc)
+    recovery=os.environ.get("MAHBRUS_RECOVERY_SINCE")
+    since=datetime.fromisoformat(recovery) if recovery else None
+    if since and (since.tzinfo is None or since>now):raise ValueError("Invalid recovery timestamp")
     path=BASE/"snapshot.json"
     previous=json.loads(path.read_text()) if path.exists() else {"accounts":{}}
     snapshot={"schema":1,"collected_at":__import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),"accounts":{}}
     for key in json.loads(secret("accounts")):
         old=previous.get("accounts",{}).get(key,{})
         try:
+            if since and old.get("status")=="ok":
+                try:checked=datetime.fromisoformat(old.get("checked_at", ""))
+                except ValueError:checked=None
+                if checked and checked.tzinfo and since<=checked<=now:
+                    snapshot["accounts"][key]=old
+                    continue
             data=collect_account(key,old)
             old_ids={x["id"] for x in old.get("messages",[])+old.get("announcements",[])}
             new_ids=[x["id"] for x in data["messages"]+data["announcements"] if x["id"] not in old_ids]
@@ -315,6 +331,8 @@ def main():
             print(json.dumps({"child":key,"status":"ok","messages":len(data["messages"]),"announcements":len(data["announcements"]),"new":len(new_ids),"timetable_days":len(data["sections"].get("timetable",{}).get("days",[]))},ensure_ascii=False))
         except Exception as e:
             data=dict(old);data["status"]="error";data["error"]=str(e);data["error_code"]=failure_code(e);data["child"]=key
+            data.pop("error_phase",None)
+            if isinstance(e,PreLoginUnavailable):data["error_phase"]="pre_login"
             snapshot["accounts"][key]=data
             print(json.dumps({"child":key,"status":"error","error":str(e)},ensure_ascii=False))
     tmp=BASE/"snapshot.tmp"

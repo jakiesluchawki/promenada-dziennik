@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import collector, publisher
 from schedule_due import needs_collection
 import report_attachments
+from librus_http import prelogin_retryable
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 def principal_id(login):
@@ -62,6 +63,9 @@ def main():
                 elif not previous: raise ValueError('No student snapshot for dry run')
                 report = publisher.load_report()
             if any(a.get('status') != 'ok' for a in report['accounts'].values()):
+                if prelogin_retryable(report):
+                    output('retryable', 'true')
+                    output('recovery_since', datetime.fromisoformat(report['collected_at']).isoformat())
                 raise RuntimeError('Student collection incomplete; previous ciphertext preserved')
             report.update(audience='student', principal=principal)
             for account in report['accounts'].values(): account['role'] = 'student'

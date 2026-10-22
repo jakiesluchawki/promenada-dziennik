@@ -186,6 +186,20 @@ class CloudRunDiagnostics(unittest.TestCase):
         self.assertEqual(report['accounts']['demo']['status'], 'error')
         self.stage.assert_called_once_with(self.site)
 
+    def test_prelogin_warning_exports_retry_metadata_without_private_diagnostics(self):
+        def collect():
+            self.collect()
+            path = collector.BASE / 'snapshot.json'
+            snapshot = json.loads(path.read_text())
+            snapshot['accounts']['demo'].update(status='error', error=MARKER,
+                                               error_code='network_timeout', error_phase='pre_login')
+            path.write_text(json.dumps(snapshot))
+            raise SystemExit(2)
+        result, logs = self.run_cloud(collect)
+        self.assertEqual(result, 0)
+        self.assertEqual(self.output.read_text(), 'healthy=false\nretryable=true\nrecovery_since=2026-10-02T16:00:00+00:00\n')
+        self.assertIn('network_timeout=1', logs)
+
     def test_audit_failure_emits_only_fixed_labels(self):
         with patch.object(publisher, 'audit', side_effect=ReportError('plaintext_public_file')):
             result, logs = self.run_cloud(self.collect)

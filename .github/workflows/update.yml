@@ -1,10 +1,14 @@
 name: Update private school report
-run-name: "${{ inputs.scheduled && 'Scheduled report' || 'Manual report' }}"
+run-name: "${{ inputs.verify_recovery && 'Recovery verification' || inputs.scheduled && 'Scheduled report' || 'Manual report' }}"
 on:
   workflow_dispatch:
     inputs:
       scheduled:
         description: 'Skip Librus when this morning/evening already has healthy data'
+        type: boolean
+        default: false
+      verify_recovery:
+        description: 'Exercise fresh-runner recovery using the current healthy report (set scheduled=true)'
         type: boolean
         default: false
 env:
@@ -20,17 +24,33 @@ concurrency:
 jobs:
   report:
     runs-on: ubuntu-latest
+    continue-on-error: true
+    outputs:
+      ok: ${{ steps.receipt.outcome == 'success' || steps.guard.outputs.allowed == 'false' }}
+      retryable: ${{ steps.collect.outputs.retryable || steps.probe.outputs.retryable }}
+      recovery_since: ${{ steps.collect.outputs.recovery_since }}
+    env:
+      MAHBRUS_NETWORK_RECOVERY: 'false'
+      MAHBRUS_RECOVERY_SINCE: ''
     timeout-minutes: 12
-    environment:
+    environment: &pages_environment
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    steps:
+    steps: &report_steps
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: main
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
+      # This diagnostic exercises job recovery without changing the report or logging in.
+      - name: Exercise pre-login recovery without collecting
+        id: probe
+        if: inputs.verify_recovery && inputs.scheduled && env.MAHBRUS_NETWORK_RECOVERY != 'true'
+        run: |
+          echo 'retryable=true' >> "$GITHUB_OUTPUT"
+          echo 'Synthetic pre-login failure; no Librus request was made.'
+          exit 1
       - name: Limit repeated collection attempts
         id: guard
         env:
@@ -94,6 +114,7 @@ jobs:
           pathlib.Path(os.environ["RUNNER_TEMP"], "mahbrus-publication.json").write_text(json.dumps(receipt))
           PY
       - name: Save publication verification receipt
+        id: receipt
         if: steps.guard.outputs.allowed == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -101,3 +122,25 @@ jobs:
           path: ${{ runner.temp }}/mahbrus-publication.json
           if-no-files-found: error
           retention-days: 1
+
+  recover:
+    name: One recovery on a fresh runner
+    needs: report
+    if: always() && !cancelled() && needs.report.outputs.ok != 'true' && needs.report.outputs.retryable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: *pages_environment
+    env:
+      MAHBRUS_NETWORK_RECOVERY: 'true'
+      MAHBRUS_RECOVERY_SINCE: ${{ needs.report.outputs.recovery_since }}
+    steps: *report_steps
+  collection-failed:
+    name: Report an unrecovered failure
+    needs: report
+    if: always() && !cancelled() && needs.report.outputs.ok != 'true' && needs.report.outputs.retryable != 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - run: |
+          echo 'Report update failed; automatic login replay was not allowed. Previous data remains available.'
+          exit 1

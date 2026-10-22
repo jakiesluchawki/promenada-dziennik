@@ -9,10 +9,28 @@ RETRY_STATUSES = frozenset({502, 503, 504})
 FAILURE_CODES = frozenset({
     "network_timeout", "network_connection", "tls_error", "upstream_unavailable", "collection_failed",
 })
+TRANSIENT_CODES = frozenset({"network_timeout", "network_connection", "upstream_unavailable"})
+
+
+class PreLoginUnavailable(RuntimeError):
+    """A transient failure of the initial GET, before any credentials were sent."""
+    def __init__(self, error):
+        self.error_code = failure_code(error)
+        if self.error_code not in TRANSIENT_CODES:
+            raise ValueError("Not a transient pre-login failure")
+        super().__init__(str(error))
+
+
+def prelogin_retryable(snapshot):
+    failed = [a for a in snapshot.get("accounts", {}).values() if a.get("status") != "ok"]
+    return bool(failed) and all(a.get("error_phase") == "pre_login" and
+                                a.get("error_code") in TRANSIENT_CODES for a in failed)
 
 
 def failure_code(error):
     """Content-free labels suitable for public CI diagnostics."""
+    if isinstance(error, PreLoginUnavailable):
+        return error.error_code
     if isinstance(error, requests.exceptions.SSLError):
         return "tls_error"
     if isinstance(error, requests.exceptions.Timeout):

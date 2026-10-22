@@ -11,6 +11,20 @@ test('a verified step needs no receipt lookup', async () => {
   assert.equal(await publicationVerified(github, { id: 25 }), true);
   assert.equal(calls.length, 1);
 });
+test('successful recovery verifies a run whose initial verification was skipped', async () => {
+  const github = async () => ({ jobs: [
+    { steps: [{ name: VERIFIED_STEP, conclusion: 'skipped' }] },
+    { steps: [{ name: VERIFIED_STEP, conclusion: 'success' }] },
+  ] });
+  assert.equal(await publicationVerified(github, { id: 25 }), true);
+});
+test('two unsuccessful jobs still cannot certify publication', async () => {
+  const github = async () => ({ jobs: [
+    { steps: [{ name: VERIFIED_STEP, conclusion: 'skipped' }] },
+    { steps: [{ name: VERIFIED_STEP, conclusion: 'failure' }] },
+  ] });
+  assert.equal(await publicationVerified(github, { id: 25 }), false);
+});
 test('a receipt verifies missing steps only for this exact run attempt', async () => {
   const calls: string[] = [];
   const github = async (path: string) => {
