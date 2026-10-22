@@ -32,6 +32,22 @@ test('workflow success with skipped publication is not proof of freshness', asyn
 test('verified fresh publication, including manual, prevents another collection', async () => {
   const f = mock([run(1, { display_title: 'Manual report' })], 'success'); assert.equal((await watchdog('parent', 'fixture', f.fetcher, now)).state, 'fresh'); assert.ok(f.calls.every(c => !c.body));
 });
+test('local workflow and branch filtering suppresses duplicates when the upstream branch filter returns no runs', async () => {
+  for (const profile of ['parent', 'student'] as const) {
+    const path = `.github/workflows/${profile === 'parent' ? 'update.yml' : 'update-student.yml'}`;
+    const calls: string[] = [];
+    const fetcher = (async (url, options) => {
+      assert.equal(options?.method, 'GET');
+      const address = String(url); calls.push(address);
+      return Response.json(address.includes('/jobs?') ? { jobs: [{ steps: [{ name: VERIFIED_STEP, conclusion: 'success' }] }] } : { workflow_runs: address.includes('branch=') ? [] : [
+        run(3, { path, head_branch: 'feature', status: 'in_progress' }),
+        run(2, { path: '.github/workflows/unrelated.yml', status: 'in_progress' }), run(1, { path }),
+      ] });
+    }) as typeof fetch;
+    assert.equal((await watchdog(profile, 'fixture', fetcher, now)).state, 'fresh');
+    assert.ok(calls.at(-1)?.includes('/runs/1/jobs?'));
+  }
+});
 test('yesterday verified publication cannot satisfy this morning', async () => {
   const f = mock([run(1, { created_at: '2026-09-11T16:00:00Z' })], 'success'); assert.equal((await watchdog('parent', 'fixture', f.fetcher, now)).state, 'dispatched');
 });

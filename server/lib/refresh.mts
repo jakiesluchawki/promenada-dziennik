@@ -33,7 +33,9 @@ export async function handle(req: Request, env: Settings, fetcher: typeof fetch 
   try {
     const query = new URL(req.url).searchParams.get('run');
     if (query && !/^(after:)?\d{1,20}$/.test(query)) return reply('error', 'Nieprawidłowy odczyt.', 400);
-    const result = await github(`/workflows/${workflow}/runs?branch=main&per_page=30`);
+    // GitHub can return an empty history for ?branch=main even when main runs exist.
+    // Select the workflow endpoint, then enforce branch and path locally below.
+    const result = await github(`/workflows/${workflow}/runs?per_page=100`);
     const runs = (result.workflow_runs as Run[]).filter(r => r.path === `.github/workflows/${workflow}` && r.head_branch === 'main');
     if (req.method === 'GET' && query) {
       const run = query.startsWith('after:') ? runs.find(r => r.id > Number(query.slice(6))) : runs.find(r => String(r.id) === query);

@@ -26,7 +26,8 @@ export async function watchdog(profile: 'parent' | 'student', token: string | un
     if (!response.ok) throw new Error(`GitHub status ${response.status}`);
     return response.status === 204 ? null : response.json();
   };
-  const list = await github(`/workflows/${workflow}/runs?branch=main&per_page=100`);
+  // Keep branch filtering local; GitHub's query filter can omit real main runs.
+  const list = await github(`/workflows/${workflow}/runs?per_page=100`);
   const runs = (list.workflow_runs as Run[]).filter(r => r.path === `.github/workflows/${workflow}` && r.head_branch === 'main');
   if (runs.some(r => r.status !== 'completed')) return { state: 'running' };
   const recent = runs.filter(r => Date.parse(r.created_at) >= slot.since);

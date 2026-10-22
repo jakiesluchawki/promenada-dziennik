@@ -42,6 +42,26 @@ test('polling stays scoped and never dispatches', async () => {
   assert.equal((await (await handle(request(student, 'GET', '?run=after:20'), env, f.fetcher)).json()).state, 'complete');
   assert.equal(f.calls.length, 2);
 });
+test('polling finds real main runs despite the upstream branch-filter bug, keeping profile and ref isolation', async () => {
+  for (const token of [parent, student]) {
+    const workflow = token === parent ? 'update.yml' : 'update-student.yml';
+    const other = token === parent ? 'update-student.yml' : 'update.yml';
+    const base = { status: 'completed', conclusion: 'success', created_at: new Date().toISOString(), head_branch: 'main', path: `.github/workflows/${workflow}` };
+    const calls: string[] = [];
+    const fetcher = (async (url, options) => {
+      assert.equal(options?.method, 'GET');
+      const path = String(url); calls.push(path);
+      return Response.json(path.includes('/jobs?') ? { jobs: [{ steps: [{ name: 'Verify fresh published report', conclusion: 'success' }] }] } : { workflow_runs: path.includes('branch=') ? [] : [
+        { ...base, id: 27, path: `.github/workflows/${other}` },
+        { ...base, id: 26, head_branch: 'feature' }, { ...base, id: 25 },
+      ] });
+    }) as typeof fetch;
+    for (const [id, state] of [[25, 'complete'], [26, 'queued'], [27, 'queued']] as const) {
+      assert.equal((await (await handle(request(token, 'GET', `?run=${id}`), env, fetcher)).json()).state, state);
+    }
+    assert.ok(calls.filter(url => url.includes('/jobs?')).every(url => url.includes('/runs/25/')));
+  }
+});
 test('skipped collection cannot claim a freshly published report', async () => {
   const fetcher = (async (url) => Response.json(String(url).includes('/jobs?') ? { jobs: [{ steps: [{ name: 'Verify fresh published report', conclusion: 'skipped' }] }] } : { workflow_runs: [{ id: 25, status: 'completed', conclusion: 'success', created_at: new Date().toISOString(), head_branch: 'main', path: '.github/workflows/update-student.yml' }] })) as typeof fetch;
   assert.equal((await (await handle(request(student, 'GET', '?run=25'), env, fetcher)).json()).state, 'cooldown');

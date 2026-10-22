@@ -26,6 +26,8 @@ Stronicowanie skrzynki obsługuje zarówno zwykłe linki, jak i formularz Librus
 
 Jeżeli wszystkie nieudane konta zatrzymały się na przejściowym błędzie pierwszego GET-a, zanim wysłano dane logowania, ten sam przebieg Actions uruchamia najwyżej jedną próbę naprawczą na nowej maszynie. Dotyczy to również ręcznego odświeżenia poza godzinami harmonogramu. Poprawnie odczytane w pierwszej próbie konto zachowuje swój rzeczywisty czas odczytu i nie jest logowane ponownie. Błędy po wysłaniu poświadczeń, CAPTCHA, odmowy dostępu, TLS i błędy parsera nie kwalifikują się do tej próby. Powtórna porażka nadal oznacza błąd całego przebiegu. Parametry `verify_recovery=true` i `scheduled=true` pozwalają sprawdzić ten mechanizm na aktualnym zdrowym raporcie bez nowego logowania; nie fałszują danych raportu ani wyniku jego weryfikacji.
 
+Potwierdzanie odświeżenia, harmonogram i blokada zbyt częstych prób pobierają historię wybranego workflow, po czym samodzielnie filtrują dokładną ścieżkę i gałąź `main`. Pomijają zawodny filtr `branch` API GitHuba, który potrafi zwrócić pustą historię mimo istniejących przebiegów. Rozdzielenie dostępu rodzica i ucznia pozostaje bez zmian.
+
 ## Nowości i priorytety
 Fioletowe znaczniki wskazują nieprzejrzane treści, bordowe bliskie lub przekroczone terminy, oliwkowe sprawy do dopilnowania, a niebieskie informacje. Priorytet wiadomości można zmienić. Stan przeczytania i wykonania zapisuje się w danej przeglądarce, bez synchronizacji między urządzeniami. Nowe treści są pobierane automatycznie; pierwsza lista spraw została opracowana ręcznie, a priorytety korzystają z prostych reguł, bez modelu AI.
 
