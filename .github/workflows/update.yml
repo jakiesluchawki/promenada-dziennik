@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
       verify_recovery:
-        description: 'Exercise fresh-runner recovery using the current healthy report (set scheduled=true)'
+        description: 'Test both Pages publications with the existing report, without contacting Librus'
         type: boolean
         default: false
 env:
@@ -43,14 +43,6 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      # This diagnostic exercises job recovery without changing the report or logging in.
-      - name: Exercise pre-login recovery without collecting
-        id: probe
-        if: inputs.verify_recovery && inputs.scheduled && env.MAHBRUS_NETWORK_RECOVERY != 'true'
-        run: |
-          echo 'retryable=true' >> "$GITHUB_OUTPUT"
-          echo 'Synthetic pre-login failure; no Librus request was made.'
-          exit 1
       - name: Limit repeated collection attempts
         id: guard
         env:
@@ -61,7 +53,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check -q -r requirements.txt
       - name: Check whether this collection window is already covered
         id: due
-        if: steps.guard.outputs.allowed == 'true'
+        if: steps.guard.outputs.allowed == 'true' && !inputs.verify_recovery
         env:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: python scripts/schedule_due.py
@@ -69,6 +61,7 @@ jobs:
         id: collect
         if: steps.due.outputs.due == 'true'
         env:
+          MAHBRUS_RECOVERY_SINCE: ${{ steps.due.outputs.reuse_since }}
           LIBRUS_ACCOUNTS: ${{ secrets.LIBRUS_ACCOUNTS }}
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
           PARENT_REFRESH_CONFIG: ${{ secrets.PARENT_REFRESH_CONFIG }}
@@ -89,12 +82,23 @@ jobs:
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         if: steps.guard.outputs.allowed == 'true'
         with:
+          name: &pages_artifact github-pages-${{ github.job }}-${{ github.run_attempt }}
           path: '_site'
           retention-days: 1
       - name: Publish the updated site
         id: deployment
         if: steps.guard.outputs.allowed == 'true'
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        with:
+          artifact_name: *pages_artifact
+      # Exercise both uploads and deployments using the same run, as in a real recovery.
+      - name: Exercise recovery after the first publication
+        id: probe
+        if: inputs.verify_recovery && steps.guard.outputs.allowed == 'true' && env.MAHBRUS_NETWORK_RECOVERY != 'true'
+        run: |
+          echo 'retryable=true' >> "$GITHUB_OUTPUT"
+          echo 'Synthetic failure after publication; no Librus request was made.'
+          exit 1
       - name: Surface collection problems
         if: steps.due.outputs.due == 'true' && steps.collect.outputs.healthy != 'true'
         run: |

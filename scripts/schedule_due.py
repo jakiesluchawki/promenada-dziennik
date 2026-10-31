@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import json, os, pathlib
 import collector, publisher
+from librus_http import prelogin_retryable
 ZONE = ZoneInfo("Europe/Warsaw")
 
 def slot_start(now):
@@ -24,16 +25,39 @@ def needs_collection(report, now):
         except (ValueError, KeyError, TypeError): return True
     return False
 
+def collection_plan(report, now, *, scheduled, recovery_since=None):
+    """Return whether to collect, which successful reads to reuse, and the reason."""
+    collected = datetime.fromisoformat(report["collected_at"].replace("Z", "+00:00"))
+    if collected.tzinfo is None or collected > now:
+        raise ValueError("Invalid collection timestamp")
+    if scheduled and not needs_collection(report, now):
+        return False, "", "This collection window already has a healthy report; no Librus login needed."
+
+    if recovery_since:
+        # Only the second job of this same failed pre-login attempt may bypass cooldown.
+        if datetime.fromisoformat(recovery_since) != collected or not prelogin_retryable(report):
+            raise ValueError("Recovery does not match the failed report")
+    elif now - collected < timedelta(minutes=5):
+        return False, "", "Recent collection attempt; cooldown active."
+
+    # A scheduled retry only needs the missing accounts in the current Warsaw slot.
+    # A manual refresh can reuse a successful read only from its own first job.
+    reuse_since = collected.isoformat() if recovery_since else ""
+    if scheduled:
+        reuse_since = slot_start(now).isoformat()
+    return True, reuse_since, "Collection is due."
+
 def main():
     root = pathlib.Path(__file__).resolve().parent.parent
     report = publisher.load_current_report(root, collector.secret("site-password"), audience="parent", principal="parent")
     now = datetime.now(ZONE)
-    checked = datetime.fromisoformat(report["collected_at"].replace("Z", "+00:00"))
-    due = (now - checked).total_seconds() >= 300
-    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" or os.environ.get("MAHBRUS_SCHEDULED") == "true":
-        due = due and needs_collection(report, now)
-    with open(os.environ["GITHUB_OUTPUT"], "a") as out: out.write("due="+str(due).lower()+"\n")
-    print("Collection is due." if due else "This collection window already has a healthy report; no Librus login needed.")
+    scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule" or os.environ.get("MAHBRUS_SCHEDULED") == "true"
+    due, reuse_since, message = collection_plan(
+        report, now, scheduled=scheduled, recovery_since=os.environ.get("MAHBRUS_RECOVERY_SINCE"),
+    )
+    with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+        out.write(f"due={str(due).lower()}\nreuse_since={reuse_since}\n")
+    print(message)
 
 if __name__ == "__main__":
     try: main()
