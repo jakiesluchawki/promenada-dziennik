@@ -62,7 +62,7 @@ def main(on_phase=lambda phase: None):
             on_phase("cleanup")
         finally:
             collector.BASE, publisher.BASE = old_bases
-    print("Encrypted report prepared. " + ("Some accounts require attention; last good data preserved." if failed else "All accounts refreshed."))
+    print("Encrypted report prepared. " + ("Some accounts require attention; last good data preserved." if failed else "All accounts healthy."))
     if failed:
         codes = [a.get("error_code", "collection_failed") for a in state["accounts"].values() if a.get("status") != "ok"]
         # Counts and fixed labels only: no names, URLs, credentials or exception text.

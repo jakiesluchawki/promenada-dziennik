@@ -171,7 +171,7 @@ class CloudRunDiagnostics(unittest.TestCase):
     def test_success_keeps_health_and_source_validation_behavior(self):
         result, logs = self.run_cloud(self.collect)
         self.assertEqual(result, 0)
-        self.assertIn('All accounts refreshed.', logs)
+        self.assertIn('All accounts healthy.', logs)
         self.assertEqual(self.output.read_text(), 'healthy=true\n')
         report = publisher.decrypt(json.loads(self.target.read_text()), PASSWORD)
         self.assertEqual(report['digest']['actions'][0]['source_id'], SOURCE)
